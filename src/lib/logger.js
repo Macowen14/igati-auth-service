@@ -1,11 +1,11 @@
 /**
  * Logger Module
- * 
+ *
  * Configures Pino logger with:
  * - JSON structured logs to logs/app.log (info+)
  * - Debug logs to logs/debug.log
  * - Pretty console output in development
- * 
+ *
  * Uses request ID correlation for tracing requests across services.
  */
 
@@ -112,11 +112,7 @@ export function createRequestLogger(reqId) {
  * Call this during shutdown to ensure all logs are written
  */
 export async function flushLogs() {
-  return Promise.all([
-    appLogStream.flushSync(),
-    debugLogStream.flushSync(),
-  ]);
+  return Promise.all([appLogStream.flushSync(), debugLogStream.flushSync()]);
 }
 
 export default logger;
-

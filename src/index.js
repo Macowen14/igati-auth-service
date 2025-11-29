@@ -1,9 +1,9 @@
 /**
  * Application Entry Point
- * 
+ *
  * Starts the HTTP server with graceful shutdown handling.
  * Uses @godaddy/terminus for health checks and graceful shutdown.
- * 
+ *
  * Graceful shutdown:
  * 1. Stop accepting new connections
  * 2. Wait for in-flight requests to finish (timeout: 10s)
@@ -19,7 +19,10 @@ import config from './lib/config.js';
 import logger from './lib/logger.js';
 import app from './server.js';
 import { disconnect as disconnectDb, healthCheck as dbHealthCheck } from './lib/prisma.js';
-import { closeConnections as closeRedisConnections, healthCheck as redisHealthCheck } from './lib/queue.js';
+import {
+  closeConnections as closeRedisConnections,
+  healthCheck as redisHealthCheck,
+} from './lib/queue.js';
 import { flushLogs } from './lib/logger.js';
 
 /**
@@ -124,13 +127,15 @@ process.on('unhandledRejection', (reason, promise) => {
 const PORT = config.PORT;
 
 server.listen(PORT, () => {
-  logger.info({
-    port: PORT,
-    env: config.NODE_ENV,
-    nodeVersion: process.version,
-  }, 'HTTP server started');
+  logger.info(
+    {
+      port: PORT,
+      env: config.NODE_ENV,
+      nodeVersion: process.version,
+    },
+    'HTTP server started'
+  );
 });
 
 // Export server for testing
 export default server;
-

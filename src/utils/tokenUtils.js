@@ -1,9 +1,9 @@
 /**
  * Token Utilities
- * 
+ *
  * Functions for generating and hashing verification tokens.
  * Uses HMAC-SHA256 for secure token hashing before database storage.
- * 
+ *
  * Security: Tokens are hashed to prevent rainbow table attacks
  * if the database is compromised.
  */
@@ -24,7 +24,7 @@ export function generateToken(length = 32) {
 /**
  * Hash a token using HMAC-SHA256
  * Used before storing tokens in the database to prevent plaintext exposure.
- * 
+ *
  * @param {string} token - Plain token to hash
  * @returns {string} HMAC-SHA256 hash (hex encoded)
  */
@@ -59,7 +59,7 @@ export function verifyToken(token, hash) {
  * Generate and hash a token pair
  * Useful when you need both the plain token (to send via email)
  * and the hash (to store in database).
- * 
+ *
  * @param {number} length - Token length in bytes
  * @returns {{token: string, hash: string}} Token and its hash
  */
@@ -68,4 +68,3 @@ export function generateTokenPair(length = 32) {
   const hash = hashToken(token);
   return { token, hash };
 }
-

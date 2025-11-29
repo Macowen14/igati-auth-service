@@ -1,7 +1,7 @@
 {
   "name": "auth-service",
   "version": "1.0.0",
-  "description": "Production-ready Express authentication microservice with email verification and social logins",
+  "description": "Production-ready Igati Express authentication microservice with email verification and social logins",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
@@ -17,7 +17,7 @@
     "test": "NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "lint": "eslint src/ tests/",
-    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\""
+    "format": "prettier --write \"src/**/*.js\" \"src/tests/**/*.js\""
   },
   "keywords": [
     "express",
@@ -51,7 +51,7 @@
   },
   "devDependencies": {
     "eslint": "^8.57.1",
-    "ioredis-mock": "^4.7.0",
+    "ioredis-mock": "^8.13.1",
     "jest": "^30.2.0",
     "prettier": "^3.7.3",
     "prisma": "^6.19.0",

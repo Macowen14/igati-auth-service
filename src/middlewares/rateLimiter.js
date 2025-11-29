@@ -1,9 +1,9 @@
 /**
  * Rate Limiter Middleware
- * 
+ *
  * Protects authentication endpoints from brute force attacks.
  * Uses express-rate-limit with IP-based limiting.
- * 
+ *
  * Security: Rate limiting prevents:
  * - Brute force password attacks
  * - Account enumeration via signup endpoints
@@ -17,7 +17,7 @@ import logger from '../lib/logger.js';
 /**
  * General rate limiter for auth endpoints
  * Limits requests per IP address within a time window.
- * 
+ *
  * Default: 5 requests per 15 minutes per IP
  */
 export const authRateLimiter = rateLimit({
@@ -32,10 +32,13 @@ export const authRateLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
   handler: (req, res) => {
-    logger.warn({
-      ip: req.ip,
-      path: req.path,
-    }, 'Rate limit exceeded');
+    logger.warn(
+      {
+        ip: req.ip,
+        path: req.path,
+      },
+      'Rate limit exceeded'
+    );
     res.status(429).json({
       error: {
         code: 'TooManyRequests',
@@ -68,11 +71,14 @@ export const loginRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
-    logger.warn({
-      ip: req.ip,
-      path: req.path,
-      email: req.body?.email, // Log email for security monitoring (be careful with GDPR)
-    }, 'Login rate limit exceeded');
+    logger.warn(
+      {
+        ip: req.ip,
+        path: req.path,
+        email: req.body?.email, // Log email for security monitoring (be careful with GDPR)
+      },
+      'Login rate limit exceeded'
+    );
     res.status(429).json({
       error: {
         code: 'TooManyRequests',
@@ -83,4 +89,3 @@ export const loginRateLimiter = rateLimit({
 });
 
 export default authRateLimiter;
-

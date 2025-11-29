@@ -1,9 +1,9 @@
 /**
  * JWT Utilities
- * 
+ *
  * Functions for signing and verifying JWTs using jose library.
  * Also provides cookie helper functions for setting secure HttpOnly cookies.
- * 
+ *
  * Security considerations:
  * - Access tokens: short-lived (15m default) for reduced exposure
  * - Refresh tokens: long-lived (30d default) but stored in database for revocation
@@ -41,7 +41,7 @@ function parseExpiry(expiry) {
 /**
  * Create a JWT access token
  * Short-lived token for API authentication.
- * 
+ *
  * @param {string} userId - User ID to encode
  * @param {string} email - User email (for logging/debugging)
  * @returns {Promise<string>} Signed JWT token
@@ -50,8 +50,8 @@ export async function createAccessToken(userId, email) {
   const secret = new TextEncoder().encode(config.JWT_SECRET);
   const expiresIn = parseExpiry(config.JWT_ACCESS_EXPIRY);
 
-  const token = await new SignJWT({ 
-    userId, 
+  const token = await new SignJWT({
+    userId,
     email,
     type: 'access',
   })
@@ -69,7 +69,7 @@ export async function createAccessToken(userId, email) {
  * Create a JWT refresh token
  * Long-lived token for obtaining new access tokens.
  * Note: The hash of this token should be stored in the database for rotation/revocation.
- * 
+ *
  * @param {string} userId - User ID to encode
  * @returns {Promise<string>} Signed JWT token
  */
@@ -77,7 +77,7 @@ export async function createRefreshToken(userId) {
   const secret = new TextEncoder().encode(config.JWT_SECRET);
   const expiresIn = parseExpiry(config.JWT_REFRESH_EXPIRY);
 
-  const token = await new SignJWT({ 
+  const token = await new SignJWT({
     userId,
     type: 'refresh',
   })
@@ -171,4 +171,3 @@ export function clearAuthCookies(res) {
 export function getTokenFromCookie(req, cookieName = 'accessToken') {
   return req.cookies?.[cookieName];
 }
-

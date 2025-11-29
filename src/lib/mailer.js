@@ -1,9 +1,9 @@
 /**
  * Mailer Module (Resend Wrapper)
- * 
+ *
  * Wrapper around Resend SDK for sending emails.
  * Provides a simple interface for sending verification emails.
- * 
+ *
  * Note: This module is used by the email worker, not directly in API routes.
  */
 
@@ -19,7 +19,7 @@ const resend = new Resend(config.RESEND_API_KEY);
 
 /**
  * Send email verification email
- * 
+ *
  * @param {object} params - Email parameters
  * @param {string} params.to - Recipient email address
  * @param {string} params.token - Verification token (plain, not hashed)
@@ -96,7 +96,7 @@ export async function sendVerificationEmail({ to, token, name }) {
 
 /**
  * Send password reset email (optional, for future use)
- * 
+ *
  * @param {object} params - Email parameters
  * @param {string} params.to - Recipient email address
  * @param {string} params.token - Reset token
@@ -145,3 +145,70 @@ export async function sendPasswordResetEmail({ to, token, name }) {
   }
 }
 
+/**
+ * Send welcome email to newly verified users
+ *
+ * @param {object} params - Email parameters
+ * @param {string} params.to - Recipient email address
+ * @param {string} params.name - User name (optional)
+ * @returns {Promise<{id: string}>} Resend response with message ID
+ */
+export async function sendWelcomeEmail({ to, name }) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #4a90e2;">Welcome!</h1>
+        <p>Hi${name ? ` ${name}` : ''},</p>
+        <p>Your email has been verified successfully. Welcome to our platform!</p>
+        <p>You can now log in and start using all the features.</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${config.APP_URL}/login" 
+             style="background-color: #4a90e2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+            Log In
+          </a>
+        </div>
+        <p style="margin-top: 30px; font-size: 12px; color: #999;">
+          If you have any questions, feel free to reach out to our support team.
+        </p>
+      </body>
+    </html>
+  `;
+
+  const text = `
+    Welcome!
+
+    Hi${name ? ` ${name}` : ''},
+
+    Your email has been verified successfully. Welcome to our platform!
+
+    You can now log in at: ${config.APP_URL}/login
+
+    If you have any questions, feel free to reach out to our support team.
+  `;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: config.RESEND_FROM_EMAIL,
+      to,
+      subject: 'Welcome!',
+      html,
+      text,
+    });
+
+    if (error) {
+      logger.error({ error, to }, 'Failed to send welcome email');
+      throw error;
+    }
+
+    logger.info({ messageId: data?.id, to }, 'Welcome email sent');
+    return { id: data?.id };
+  } catch (error) {
+    logger.error({ error, to }, 'Error sending welcome email');
+    throw error;
+  }
+}

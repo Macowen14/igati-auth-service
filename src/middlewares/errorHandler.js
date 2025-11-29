@@ -1,6 +1,6 @@
 /**
  * Error Handler Middleware
- * 
+ *
  * Centralized error handling for Express routes.
  * Maps internal errors to consistent JSON responses with appropriate
  * HTTP status codes. Logs full error details but doesn't leak stack
@@ -81,7 +81,7 @@ function mapPrismaError(error) {
 /**
  * Central error handler middleware
  * Should be used as the last middleware in the Express app.
- * 
+ *
  * @param {Error} error - Error object
  * @param {object} req - Express request object
  * @param {object} res - Express response object
@@ -137,4 +137,3 @@ export function errorHandler(error, req, res, next) {
 }
 
 export default errorHandler;
-

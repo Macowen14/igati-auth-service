@@ -16,11 +16,15 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Starting database seeding...');
 
-  // TODO: RESUME-HERE - Uncomment and configure admin user creation
-  
-  /*
-  // Hash password for admin user
+  // Create admin user (if not exists)
+  // Set ADMIN_PASSWORD environment variable to customize password
+  // Default password: Admin123!
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
   const adminPassword = process.env.ADMIN_PASSWORD || 'Admin123!';
+
+  console.log(`Creating/updating admin user: ${adminEmail}`);
+
+  // Hash password for admin user
   const passwordHash = await argon2.hash(adminPassword, {
     type: argon2.argon2id,
     memoryCost: 65536,
@@ -28,22 +32,26 @@ async function main() {
     parallelism: 4,
   });
 
-  // Create admin user
+  // Create or update admin user
   const adminUser = await prisma.user.upsert({
-    where: { email: 'admin@example.com' },
-    update: {},
+    where: { email: adminEmail },
+    update: {
+      // Update password if user already exists (optional - comment out to preserve existing password)
+      // passwordHash,
+      emailVerified: true, // Ensure admin email is always verified
+    },
     create: {
-      email: 'admin@example.com',
+      email: adminEmail,
       passwordHash,
-      emailVerified: true,
+      emailVerified: true, // Admin users are pre-verified
     },
   });
 
-  console.log('Admin user created:', {
+  console.log('✅ Admin user created/updated:', {
     id: adminUser.id,
     email: adminUser.email,
+    emailVerified: adminUser.emailVerified,
   });
-  */
 
   console.log('Database seeding completed.');
 }

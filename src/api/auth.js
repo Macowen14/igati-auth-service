@@ -1,9 +1,9 @@
 /**
  * Authentication Routes
- * 
+ *
  * Handles signup, login, logout, email verification, and token refresh.
  * All routes use asyncHandler to catch errors and rate limiting for protection.
- * 
+ *
  * Security: Generic error messages prevent user enumeration attacks.
  */
 
@@ -15,11 +15,11 @@ import { authRateLimiter, loginRateLimiter } from '../middlewares/rateLimiter.js
 import {
   createUser,
   verifyEmailToken,
+  resendVerificationEmail,
   authenticateUser,
   storeRefreshToken,
   verifyRefreshToken,
   revokeRefreshToken,
-  revokeAllUserRefreshTokens,
 } from '../services/authService.js';
 import {
   createAccessToken,
@@ -30,7 +30,6 @@ import {
   getTokenFromCookie,
 } from '../lib/jwt.js';
 import { hashToken } from '../utils/tokenUtils.js';
-import config from '../lib/config.js';
 
 const router = express.Router();
 
@@ -46,10 +45,10 @@ router.use((req, res, next) => {
 
 /**
  * POST /api/auth/signup
- * 
+ *
  * Creates a new user account and sends verification email.
  * Returns 201 immediately - email is sent asynchronously via worker.
- * 
+ *
  * Body: { email: string, password: string, name?: string }
  */
 router.post(
@@ -75,14 +74,47 @@ router.post(
   })
 );
 
-// TODO: RESUME-HERE - Add resend verification email endpoint if needed
+/**
+ * POST /api/auth/resend-verification
+ *
+ * Resends verification email for a user who hasn't verified their email.
+ * Returns generic success message to prevent user enumeration.
+ *
+ * Body: { email: string }
+ */
+router.post(
+  '/resend-verification',
+  authRateLimiter,
+  asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        error: {
+          code: 'ValidationError',
+          message: 'Email is required',
+        },
+      });
+    }
+
+    req.logger.debug({ email }, 'Resend verification email request');
+
+    // Resend verification email
+    // Returns generic message to prevent user enumeration
+    await resendVerificationEmail(email);
+
+    res.status(200).json({
+      message: 'If an account exists with this email, a verification email has been sent',
+    });
+  })
+);
 
 /**
  * GET /api/auth/verify
- * 
+ *
  * Verifies email token and logs user in automatically.
  * Sets JWT cookies and returns success response.
- * 
+ *
  * Query: { token: string }
  */
 router.get(
@@ -131,10 +163,10 @@ router.get(
 
 /**
  * POST /api/auth/login
- * 
+ *
  * Authenticates user with email and password.
  * Sets JWT cookies on success.
- * 
+ *
  * Body: { email: string, password: string }
  */
 router.post(
@@ -176,10 +208,10 @@ router.post(
 
 /**
  * POST /api/auth/refresh
- * 
+ *
  * Exchanges refresh token for new access token.
  * Implements token rotation: old refresh token is revoked, new one is issued.
- * 
+ *
  * Uses refresh token from HttpOnly cookie.
  */
 router.post(
@@ -254,31 +286,19 @@ router.post(
 
 /**
  * POST /api/auth/logout
- * 
+ *
  * Logs out user by clearing cookies and revoking refresh tokens.
  * Requires authentication via access token cookie.
  */
 router.post(
   '/logout',
   asyncHandler(async (req, res) => {
-    const accessToken = getTokenFromCookie(req, 'accessToken');
     const refreshToken = getTokenFromCookie(req, 'refreshToken');
 
     // If refresh token exists, revoke it
     if (refreshToken) {
       const refreshTokenHash = hashToken(refreshToken);
       await revokeRefreshToken(refreshTokenHash);
-    }
-
-    // If access token exists, extract userId and revoke all tokens (optional, for security)
-    if (accessToken) {
-      try {
-        const payload = await verifyJWT(accessToken);
-        // Optionally revoke all user tokens for maximum security
-        // await revokeAllUserRefreshTokens(payload.userId);
-      } catch (error) {
-        // Token invalid, ignore
-      }
     }
 
     // Clear cookies
@@ -294,7 +314,7 @@ router.post(
 
 /**
  * GET /api/auth/me
- * 
+ *
  * Returns current user information from JWT token.
  * Requires authentication.
  */
@@ -340,4 +360,3 @@ router.get(
 );
 
 export default router;
-

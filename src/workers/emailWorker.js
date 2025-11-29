@@ -1,12 +1,12 @@
 /**
  * Email Worker
- * 
+ *
  * BullMQ worker that processes email jobs from the queue.
  * Handles sending verification emails via Resend.
- * 
+ *
  * This worker should run in a separate process from the HTTP server.
  * Can be scaled horizontally by running multiple worker instances.
- * 
+ *
  * Usage: npm run worker
  */
 
@@ -14,7 +14,7 @@ import { Worker } from 'bullmq';
 import Redis from 'ioredis';
 import config from '../lib/config.js';
 import logger from '../lib/logger.js';
-import { sendVerificationEmail } from '../lib/mailer.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../lib/mailer.js';
 import prisma from '../lib/prisma.js';
 import { flushLogs, disconnect as disconnectDb } from '../lib/prisma.js';
 
@@ -50,50 +50,100 @@ const emailWorker = new Worker(
   async (job) => {
     const { type, userId, email, token, name } = job.data;
 
-    logger.debug({
-      jobId: job.id,
-      type,
-      userId,
-      email,
-    }, 'Processing email job');
+    logger.debug(
+      {
+        jobId: job.id,
+        type,
+        userId,
+        email,
+      },
+      'Processing email job'
+    );
 
     try {
       switch (type) {
         case 'sendVerification':
           // Send verification email
-          const result = await sendVerificationEmail({
+          const verificationResult = await sendVerificationEmail({
             to: email,
             token,
             name,
           });
 
-          // Update email_sent_at timestamp in database (optional)
-          // Find the token by hashing it and matching with stored hash
-          // For simplicity, we'll skip this - the email was sent successfully
-          
-          logger.info({
-            jobId: job.id,
-            messageId: result.id,
-            userId,
-            email,
-          }, 'Verification email sent successfully');
+          logger.info(
+            {
+              jobId: job.id,
+              messageId: verificationResult.id,
+              userId,
+              email,
+            },
+            'Verification email sent successfully'
+          );
 
           return {
             success: true,
-            messageId: result.id,
+            messageId: verificationResult.id,
+          };
+
+        case 'sendPasswordReset':
+          // Send password reset email
+          const resetResult = await sendPasswordResetEmail({
+            to: email,
+            token,
+            name,
+          });
+
+          logger.info(
+            {
+              jobId: job.id,
+              messageId: resetResult.id,
+              userId,
+              email,
+            },
+            'Password reset email sent successfully'
+          );
+
+          return {
+            success: true,
+            messageId: resetResult.id,
+          };
+
+        case 'sendWelcome':
+          // Send welcome email to newly verified users
+          const welcomeResult = await sendWelcomeEmail({
+            to: email,
+            name,
+          });
+
+          logger.info(
+            {
+              jobId: job.id,
+              messageId: welcomeResult.id,
+              userId,
+              email,
+            },
+            'Welcome email sent successfully'
+          );
+
+          return {
+            success: true,
+            messageId: welcomeResult.id,
           };
 
         default:
           throw new Error(`Unknown email job type: ${type}`);
       }
     } catch (error) {
-      logger.error({
-        jobId: job.id,
-        error: error.message,
-        stack: error.stack,
-        userId,
-        email,
-      }, 'Failed to process email job');
+      logger.error(
+        {
+          jobId: job.id,
+          error: error.message,
+          stack: error.stack,
+          userId,
+          email,
+        },
+        'Failed to process email job'
+      );
 
       // Re-throw to mark job as failed (BullMQ will retry if configured)
       throw error;
@@ -116,21 +166,27 @@ emailWorker.on('completed', (job) => {
 });
 
 emailWorker.on('failed', (job, error) => {
-  logger.error({
-    jobId: job?.id,
-    error: error.message,
-    stack: error.stack,
-    attemptsMade: job?.attemptsMade,
-  }, 'Email job failed');
+  logger.error(
+    {
+      jobId: job?.id,
+      error: error.message,
+      stack: error.stack,
+      attemptsMade: job?.attemptsMade,
+    },
+    'Email job failed'
+  );
 
   // Log to dead-letter log for failed jobs after all retries
   if (job?.attemptsMade >= (job?.opts?.attempts || 3)) {
-    logger.error({
-      jobId: job.id,
-      data: job.data,
-      error: error.message,
-      stack: error.stack,
-    }, 'Email job permanently failed - dead letter');
+    logger.error(
+      {
+        jobId: job.id,
+        data: job.data,
+        error: error.message,
+        stack: error.stack,
+      },
+      'Email job permanently failed - dead letter'
+    );
   }
 });
 
@@ -180,5 +236,7 @@ process.on('unhandledRejection', (reason, promise) => {
 
 logger.info('Email worker started and ready to process jobs');
 
-// TODO: RESUME-HERE - Add support for password reset emails, welcome emails, etc.
-
+// Supported email job types:
+// - sendVerification: Email verification for new signups
+// - sendPasswordReset: Password reset request emails
+// - sendWelcome: Welcome email after email verification

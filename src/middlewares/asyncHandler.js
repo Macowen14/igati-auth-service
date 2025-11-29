@@ -1,10 +1,10 @@
 /**
  * Async Handler Middleware
- * 
+ *
  * Wraps async route handlers to automatically catch errors and pass them
  * to the error handling middleware. This eliminates the need for try-catch
  * blocks in every route handler.
- * 
+ *
  * Usage:
  *   router.post('/signup', asyncHandler(async (req, res) => {
  *     // async code here
@@ -24,4 +24,3 @@ export function asyncHandler(fn) {
 }
 
 export default asyncHandler;
-

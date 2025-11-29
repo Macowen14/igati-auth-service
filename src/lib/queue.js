@@ -1,9 +1,9 @@
 /**
  * BullMQ Queue Setup
- * 
+ *
  * Configures BullMQ for background job processing.
  * Jobs are queued here and processed by the email worker.
- * 
+ *
  * This module exports:
  * - emailQueue: Queue instance for email jobs
  * - closeConnections: Function to gracefully close Redis connections
@@ -44,7 +44,7 @@ redisConnection.on('close', () => {
 /**
  * Email queue for background email processing
  * Jobs are enqueued with retry logic and exponential backoff.
- * 
+ *
  * Job data structure:
  * - type: 'sendVerification'
  * - userId: User ID
@@ -100,4 +100,3 @@ export async function healthCheck() {
 }
 
 export default emailQueue;
-

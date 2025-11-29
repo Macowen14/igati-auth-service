@@ -1,9 +1,9 @@
 /**
  * OAuth Routes
- * 
+ *
  * Handles OAuth authentication flows for Google and GitHub.
  * Uses Passport.js with sessionless strategy (stateless OAuth).
- * 
+ *
  * Flow:
  * 1. User clicks "Login with Google/GitHub"
  * 2. Redirects to provider authorization
@@ -98,7 +98,8 @@ if (config.GITHUB_CLIENT_ID && config.GITHUB_CLIENT_SECRET) {
         try {
           // Extract user information from GitHub profile
           // Note: GitHub email might be private, so we might need to fetch it separately
-          const email = profile.emails?.[0]?.value || profile.username + '@users.noreply.github.com';
+          const email =
+            profile.emails?.[0]?.value || profile.username + '@users.noreply.github.com';
           const name = profile.displayName || profile.username;
 
           // Find or create user
@@ -159,7 +160,7 @@ async function handleOAuthSuccess(user, req, res) {
 
 /**
  * GET /api/auth/oauth/google
- * 
+ *
  * Initiates Google OAuth flow
  * Redirects user to Google authorization page
  */
@@ -173,7 +174,7 @@ router.get(
 
 /**
  * GET /api/auth/oauth/google/callback
- * 
+ *
  * Google OAuth callback handler
  * Receives authorization code from Google and exchanges for user info
  */
@@ -192,7 +193,7 @@ router.get(
 
 /**
  * GET /api/auth/oauth/github
- * 
+ *
  * Initiates GitHub OAuth flow
  * Redirects user to GitHub authorization page
  */
@@ -206,7 +207,7 @@ router.get(
 
 /**
  * GET /api/auth/oauth/github/callback
- * 
+ *
  * GitHub OAuth callback handler
  * Receives authorization code from GitHub and exchanges for user info
  */
@@ -223,4 +224,3 @@ router.get(
 );
 
 export default router;
-

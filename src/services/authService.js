@@ -1,10 +1,10 @@
 /**
  * Authentication Service
- * 
+ *
  * Business logic layer for authentication operations.
  * Handles user creation, password verification, token management,
  * and email verification flows.
- * 
+ *
  * All database operations and business rules are encapsulated here.
  */
 
@@ -14,7 +14,12 @@ import logger from '../lib/logger.js';
 import { generateTokenPair, hashToken } from '../utils/tokenUtils.js';
 import { emailQueue } from '../lib/queue.js';
 import config from '../lib/config.js';
-import { ValidationError, NotFoundError, AuthenticationError, ConflictError } from '../middlewares/errorHandler.js';
+import {
+  ValidationError,
+  NotFoundError,
+  AuthenticationError,
+  ConflictError,
+} from '../middlewares/errorHandler.js';
 
 /**
  * Validate email format
@@ -51,7 +56,7 @@ function validatePassword(password) {
 
 /**
  * Create a new user account
- * 
+ *
  * @param {object} params - User creation parameters
  * @param {string} params.email - User email
  * @param {string} params.password - Plain password (will be hashed)
@@ -133,40 +138,50 @@ export async function createUser({ email, password, name }) {
 
   // Enqueue email job (fire and forget - don't wait for worker)
   try {
-    await emailQueue.add('sendVerification', {
-      type: 'sendVerification',
-      userId: result.user.id,
-      email: result.user.email,
-      token, // Plain token (not hashed) - worker needs this to build the URL
-      name: name || null,
-    }, {
-      attempts: 3,
-      backoff: {
-        type: 'exponential',
-        delay: 2000,
+    await emailQueue.add(
+      'sendVerification',
+      {
+        type: 'sendVerification',
+        userId: result.user.id,
+        email: result.user.email,
+        token, // Plain token (not hashed) - worker needs this to build the URL
+        name: name || null,
       },
-    });
+      {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 2000,
+        },
+      }
+    );
 
-    logger.debug({
-      userId: result.user.id,
-      email: result.user.email,
-    }, 'Email verification job enqueued');
+    logger.debug(
+      {
+        userId: result.user.id,
+        email: result.user.email,
+      },
+      'Email verification job enqueued'
+    );
   } catch (error) {
     // Log error but don't fail the signup - email can be resent later
     logger.error({ error, userId: result.user.id }, 'Failed to enqueue email verification job');
   }
 
-  logger.info({
-    userId: result.user.id,
-    email: result.user.email,
-  }, 'User created successfully');
+  logger.info(
+    {
+      userId: result.user.id,
+      email: result.user.email,
+    },
+    'User created successfully'
+  );
 
   return result;
 }
 
 /**
  * Verify email token and mark user as verified
- * 
+ *
  * @param {string} token - Plain verification token from email link
  * @returns {Promise<{user: object}>} Updated user object
  */
@@ -219,17 +234,120 @@ export async function verifyEmailToken(token) {
     return { user };
   });
 
-  logger.info({
-    userId: result.user.id,
-    email: result.user.email,
-  }, 'Email verified successfully');
+  logger.info(
+    {
+      userId: result.user.id,
+      email: result.user.email,
+    },
+    'Email verified successfully'
+  );
 
   return result;
 }
 
 /**
+ * Resend verification email for an existing user
+ * Creates a new verification token and enqueues email job.
+ *
+ * @param {string} email - User email address
+ * @returns {Promise<{message: string}>} Success message
+ */
+export async function resendVerificationEmail(email) {
+  if (!email) {
+    throw new ValidationError('Email is required');
+  }
+
+  // Normalize email
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // Find user
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+
+  if (!user) {
+    // Return generic message to prevent user enumeration
+    // In production, you might want to return success even if user doesn't exist
+    throw new NotFoundError(
+      'If an account exists with this email, a verification email has been sent'
+    );
+  }
+
+  // Check if email is already verified
+  if (user.emailVerified) {
+    throw new ConflictError('Email address is already verified');
+  }
+
+  // Generate new email verification token
+  const { token, hash: tokenHash } = generateTokenPair(32);
+
+  // Calculate expiry
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + config.EMAIL_TOKEN_EXPIRY_HOURS);
+
+  // Create new email token (invalidate old unused tokens)
+  await prisma.$transaction(async (tx) => {
+    // Optionally: Mark old unused tokens as used (optional - allows multiple pending tokens)
+    // await tx.emailToken.updateMany({
+    //   where: {
+    //     userId: user.id,
+    //     used: false,
+    //   },
+    //   data: {
+    //     used: true,
+    //   },
+    // });
+
+    // Create new token
+    await tx.emailToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      },
+    });
+  });
+
+  // Enqueue email job
+  try {
+    await emailQueue.add(
+      'sendVerification',
+      {
+        type: 'sendVerification',
+        userId: user.id,
+        email: user.email,
+        token,
+        name: null, // We don't store names separately, could be added to User model
+      },
+      {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 2000,
+        },
+      }
+    );
+
+    logger.info(
+      {
+        userId: user.id,
+        email: user.email,
+      },
+      'Verification email resend job enqueued'
+    );
+  } catch (error) {
+    logger.error({ error, userId: user.id }, 'Failed to enqueue resend verification email job');
+    throw new Error('Failed to queue verification email. Please try again later.');
+  }
+
+  return {
+    message: 'If an account exists with this email, a verification email has been sent',
+  };
+}
+
+/**
  * Authenticate user with email and password
- * 
+ *
  * @param {object} params - Login parameters
  * @param {string} params.email - User email
  * @param {string} params.password - Plain password
@@ -265,10 +383,13 @@ export async function authenticateUser({ email, password }) {
     throw new AuthenticationError('Please verify your email address before logging in');
   }
 
-  logger.info({
-    userId: user.id,
-    email: user.email,
-  }, 'User authenticated successfully');
+  logger.info(
+    {
+      userId: user.id,
+      email: user.email,
+    },
+    'User authenticated successfully'
+  );
 
   return {
     id: user.id,
@@ -281,7 +402,7 @@ export async function authenticateUser({ email, password }) {
 /**
  * Create or update refresh token hash in database
  * Used for token rotation and revocation.
- * 
+ *
  * @param {string} userId - User ID
  * @param {string} refreshTokenHash - Hashed refresh token
  * @param {Date} expiresAt - Token expiration date
@@ -299,7 +420,7 @@ export async function storeRefreshToken(userId, refreshTokenHash, expiresAt) {
 
 /**
  * Verify refresh token hash exists and is not revoked
- * 
+ *
  * @param {string} refreshTokenHash - Hashed refresh token
  * @returns {Promise<{user: object, token: object}>} User and token record
  */
@@ -333,7 +454,7 @@ export async function verifyRefreshToken(refreshTokenHash) {
 
 /**
  * Revoke a refresh token
- * 
+ *
  * @param {string} refreshTokenHash - Hashed refresh token to revoke
  * @returns {Promise<void>}
  */
@@ -353,7 +474,7 @@ export async function revokeRefreshToken(refreshTokenHash) {
 /**
  * Revoke all refresh tokens for a user
  * Used during logout or password reset.
- * 
+ *
  * @param {string} userId - User ID
  * @returns {Promise<void>}
  */
@@ -375,7 +496,7 @@ export async function revokeAllUserRefreshTokens(userId) {
 /**
  * Find or create user by OAuth provider identity
  * Used for social login flows.
- * 
+ *
  * @param {object} params - OAuth parameters
  * @param {string} params.provider - Provider name ('google', 'github', etc.)
  * @param {string} params.providerUserId - Unique user ID from provider
@@ -487,12 +608,15 @@ export async function findOrCreateOAuthUser({
     return { user, identity: newIdentity };
   });
 
-  logger.info({
-    userId: result.user.id,
-    provider,
-    providerUserId,
-    isNewUser,
-  }, 'OAuth user created or linked');
+  logger.info(
+    {
+      userId: result.user.id,
+      provider,
+      providerUserId,
+      isNewUser,
+    },
+    'OAuth user created or linked'
+  );
 
   return {
     user: {
@@ -504,4 +628,3 @@ export async function findOrCreateOAuthUser({
     isNewUser,
   };
 }
-
