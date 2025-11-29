@@ -18,7 +18,8 @@ import Redis from 'ioredis';
 import config from '../lib/config.js';
 import logger from '../lib/logger.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../lib/mailer.js';
-import { flushLogs, disconnect as disconnectDb } from '../lib/prisma.js';
+import { disconnect as disconnectDb } from '../lib/prisma.js';
+import { flushLogs } from '../lib/logger.js';
 
 /**
  * Redis connection for BullMQ worker
