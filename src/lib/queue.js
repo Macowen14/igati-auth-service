@@ -100,3 +100,6 @@ export async function healthCheck() {
 }
 
 export default emailQueue;
+
+// TODO : set in production :
+// CONFIG SET maxmemory-policy noeviction
