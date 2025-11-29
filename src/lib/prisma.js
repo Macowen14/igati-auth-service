@@ -7,7 +7,8 @@
  * In production, use connection pooling via pgbouncer or similar.
  */
 
-import { PrismaClient } from '@prisma/client';
+import pkg from '@prisma/client';
+const { PrismaClient } = pkg;
 import logger from './logger.js';
 
 /**

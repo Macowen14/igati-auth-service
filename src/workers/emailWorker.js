@@ -10,6 +10,9 @@
  * Usage: npm run worker
  */
 
+// Load environment variables from .env file
+import 'dotenv/config';
+
 import { Worker } from 'bullmq';
 import Redis from 'ioredis';
 import config from '../lib/config.js';

@@ -390,7 +390,7 @@ Run with: `pm2 start ecosystem.config.js`
 MIT
 
 ## Support
-
+- mwingamacowen@gmail.com
 For issues and questions, please open an issue on GitHub.
 
 # igati-auth-service

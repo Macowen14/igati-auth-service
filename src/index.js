@@ -13,6 +13,10 @@
  * 6. Exit process
  */
 
+// Load environment variables from .env file
+// Must be imported FIRST before any other modules that depend on env vars
+import 'dotenv/config';
+
 import http from 'node:http';
 import { createTerminus } from '@godaddy/terminus';
 import config from './lib/config.js';
@@ -24,6 +28,9 @@ import {
   healthCheck as redisHealthCheck,
 } from './lib/queue.js';
 import { flushLogs } from './lib/logger.js';
+
+import dotenv from 'dotenv';
+dotenv.config();
 
 /**
  * Create HTTP server
