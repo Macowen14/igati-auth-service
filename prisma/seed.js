@@ -23,7 +23,7 @@ async function main() {
   // Create admin user (if not exists)
   // Set ADMIN_PASSWORD environment variable to customize password
   // Default password: Admin123!
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
+  const adminEmail = process.env.ADMIN_EMAIL || 'mwingamac@gmail.com';
   const adminPassword = process.env.ADMIN_PASSWORD || 'Admin123!';
 
   console.log(`Creating/updating admin user: ${adminEmail}`);
@@ -41,6 +41,7 @@ async function main() {
     where: { email: adminEmail },
     update: {
       // Update password if user already exists (optional - comment out to preserve existing password)
+      // TODO: edit update
       // passwordHash,
       emailVerified: true, // Ensure admin email is always verified
     },
@@ -68,4 +69,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

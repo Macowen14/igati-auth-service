@@ -18,7 +18,6 @@ import Redis from 'ioredis';
 import config from '../lib/config.js';
 import logger from '../lib/logger.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../lib/mailer.js';
-import prisma from '../lib/prisma.js';
 import { flushLogs, disconnect as disconnectDb } from '../lib/prisma.js';
 
 /**
@@ -65,7 +64,7 @@ const emailWorker = new Worker(
 
     try {
       switch (type) {
-        case 'sendVerification':
+        case 'sendVerification': {
           // Send verification email
           const verificationResult = await sendVerificationEmail({
             to: email,
@@ -87,8 +86,9 @@ const emailWorker = new Worker(
             success: true,
             messageId: verificationResult.id,
           };
+        }
 
-        case 'sendPasswordReset':
+        case 'sendPasswordReset': {
           // Send password reset email
           const resetResult = await sendPasswordResetEmail({
             to: email,
@@ -110,8 +110,9 @@ const emailWorker = new Worker(
             success: true,
             messageId: resetResult.id,
           };
+        }
 
-        case 'sendWelcome':
+        case 'sendWelcome': {
           // Send welcome email to newly verified users
           const welcomeResult = await sendWelcomeEmail({
             to: email,
@@ -132,6 +133,7 @@ const emailWorker = new Worker(
             success: true,
             messageId: welcomeResult.id,
           };
+        }
 
         default:
           throw new Error(`Unknown email job type: ${type}`);
