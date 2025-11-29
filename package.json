@@ -30,11 +30,12 @@
   "license": "MIT",
   "dependencies": {
     "@godaddy/terminus": "^4.12.1",
-    "@prisma/client": "^7.0.1",
+    "@prisma/client": "^6.19.0",
     "argon2": "^0.44.0",
     "bullmq": "^5.65.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "envalid": "^8.1.1",
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",

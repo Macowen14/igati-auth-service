@@ -6,7 +6,10 @@
  * type-safe access to configuration throughout the application.
  */
 
-import { cleanEnv, str, num, bool, url, host } from 'envalid';
+import { cleanEnv, str, num, bool, url} from 'envalid';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const config = cleanEnv(
   process.env,

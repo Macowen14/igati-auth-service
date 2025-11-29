@@ -1,0 +1,99 @@
+version: '3.8'
+
+# Production Docker Compose configuration
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+
+services:
+  # Auth service API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: auth_api_prod
+    # In production, use secrets or environment variables from your hosting platform
+    # Do NOT use .env file - set environment variables securely
+    environment:
+      # Required - must be set in production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      TOKEN_HASH_SECRET: ${TOKEN_HASH_SECRET}
+      # Server configuration
+      NODE_ENV: production
+      PORT: ${PORT:-4000}
+      APP_URL: ${APP_URL}
+      # Optional with defaults
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-noreply@example.com}
+      JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-30d}
+      EMAIL_TOKEN_EXPIRY_HOURS: ${EMAIL_TOKEN_EXPIRY_HOURS:-24}
+      ALLOW_UNVERIFIED_LOGIN: ${ALLOW_UNVERIFIED_LOGIN:-false}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true} # Must be true in production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # OAuth (if used)
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_CALLBACK_URL: ${GITHUB_CALLBACK_URL:-}
+      # Rate limiting
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-5}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+    ports:
+      - '${PORT:-4000}:${PORT:-4000}'
+    volumes:
+      # Only mount logs in production (source code is in image)
+      - ./logs:/app/logs
+    networks:
+      - auth_network
+    restart: always
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "const port = process.env.PORT || 4000; require('http').get('http://localhost:' + port + '/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: sh -c "npx prisma migrate deploy && node src/index.js"
+
+  # Email worker (separate process)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: auth_worker_prod
+    environment:
+      # Required - must be set in production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      # Server configuration
+      NODE_ENV: production
+      APP_URL: ${APP_URL}
+      # Optional with defaults
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-noreply@example.com}
+      EMAIL_TOKEN_EXPIRY_HOURS: ${EMAIL_TOKEN_EXPIRY_HOURS:-24}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      # Only mount logs in production
+      - ./logs:/app/logs
+    depends_on:
+      - api
+    networks:
+      - auth_network
+    restart: always
+    command: node src/workers/emailWorker.js
+
+networks:
+  auth_network:
+    driver: bridge

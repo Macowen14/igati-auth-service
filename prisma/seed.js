@@ -1,14 +1,18 @@
 /**
  * Prisma Seed Script
- * 
+ *
  * Creates initial admin user for testing/development.
- * 
+ *
  * Usage: npm run db:seed
- * 
+ *
  * Note: This is commented out by default. Uncomment to enable seeding.
  */
 
-import { PrismaClient } from '@prisma/client';
+// Load environment variables from .env file
+import 'dotenv/config';
+
+import pkg from '@prisma/client';
+const { PrismaClient } = pkg;
 import argon2 from 'argon2';
 
 const prisma = new PrismaClient();

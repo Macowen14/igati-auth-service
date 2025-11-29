@@ -9,7 +9,8 @@
 
 import logger from '../lib/logger.js';
 import config from '../lib/config.js';
-import { Prisma } from '@prisma/client';
+import pkg from '@prisma/client';
+const { Prisma } = pkg;
 
 /**
  * Custom error classes for better error handling

@@ -1,0 +1,57 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.backup
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+logs
+*.log
+
+# Test coverage
+coverage
+.nyc_output
+
+# Documentation
+README.md
+*.md
+!package.json
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Scripts
+scripts
+
+# Test files
+tests
+*.test.js
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma migrations (will be run in container)
+prisma/migrations
+
+# Build artifacts
+dist
+build
+
