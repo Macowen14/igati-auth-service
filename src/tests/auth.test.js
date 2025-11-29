@@ -183,9 +183,6 @@ describe('GET /api/auth/verify', () => {
       return callback(tx);
     });
 
-    const { setAuthCookies } = await import('../lib/jwt.js');
-    const { hashToken } = await import('../utils/tokenUtils.js');
-
     const response = await request(app).get('/api/auth/verify').query({ token: 'valid-token' });
 
     // Note: This will fail because we need to mock storeRefreshToken

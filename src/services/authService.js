@@ -511,7 +511,6 @@ export async function findOrCreateOAuthUser({
   provider,
   providerUserId,
   email,
-  name,
   accessToken,
   refreshToken,
   meta,
