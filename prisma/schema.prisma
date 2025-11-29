@@ -1,0 +1,92 @@
+// Prisma Schema for Auth Service
+// This schema defines the core data models for user authentication,
+// email verification, and social identity linking.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Optional: For Neon, you can use directUrl for migrations if pooler causes issues
+  // directUrl = env("DIRECT_URL")
+}
+
+// User model - core authentication entity
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String?   // null for social-only users
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  identities    Identity[]
+  emailTokens   EmailToken[]
+  refreshTokens RefreshToken[]
+
+  @@index([email])
+  @@map("users")
+}
+
+// EmailToken model - stores verification tokens for email verification
+// Tokens are hashed before storage for security
+model EmailToken {
+  id          String   @id @default(uuid())
+  userId      String
+  tokenHash   String   // HMAC-SHA256 hash of the plain token
+  used        Boolean  @default(false)
+  expiresAt   DateTime
+  emailSentAt DateTime? // timestamp when email was actually sent
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash, used, expiresAt])
+  @@index([userId])
+  @@map("email_tokens")
+}
+
+// Identity model - stores OAuth provider identities (Google, GitHub, etc.)
+model Identity {
+  id              String   @id @default(uuid())
+  userId          String
+  provider        String   // 'google', 'github', etc.
+  providerUserId  String   // unique ID from the provider
+  accessToken     String?  // encrypted in production
+  refreshToken    String?  // encrypted in production
+  expiresAt       DateTime?
+  providerMeta    Json?    // additional provider-specific data
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@index([provider, providerUserId])
+  @@map("identities")
+}
+
+// RefreshToken model - stores refresh token hashes for rotation and revocation
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   // hash of the refresh token
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([userId, revoked])
+  @@map("refresh_tokens")
+}
+

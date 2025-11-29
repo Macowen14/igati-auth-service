@@ -1,0 +1,63 @@
+{
+  "name": "auth-service",
+  "version": "1.0.0",
+  "description": "Production-ready Express authentication microservice with email verification and social logins",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "worker": "node src/workers/emailWorker.js",
+    "worker:dev": "node --watch src/workers/emailWorker.js",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:reset": "prisma migrate reset",
+    "db:studio": "prisma studio",
+    "db:seed": "node prisma/seed.js",
+    "test": "NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "lint": "eslint src/ tests/",
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\""
+  },
+  "keywords": [
+    "express",
+    "authentication",
+    "jwt",
+    "oauth",
+    "microservice"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@godaddy/terminus": "^4.12.1",
+    "@prisma/client": "^7.0.1",
+    "argon2": "^0.44.0",
+    "bullmq": "^5.65.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "envalid": "^8.1.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.8.2",
+    "jose": "^6.1.2",
+    "passport": "^0.7.0",
+    "passport-github2": "^0.1.12",
+    "passport-google-oauth20": "^2.0.0",
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.2",
+    "resend": "^6.5.2",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "ioredis-mock": "^4.7.0",
+    "jest": "^30.2.0",
+    "prettier": "^3.7.3",
+    "prisma": "^6.19.0",
+    "supertest": "^7.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
