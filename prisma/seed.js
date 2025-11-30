@@ -23,8 +23,14 @@ async function main() {
   // Create admin user (if not exists)
   // Set ADMIN_PASSWORD environment variable to customize password
   // Default password: Admin123!
-  const adminEmail = process.env.ADMIN_EMAIL || 'mwingamac@gmail.com';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'Admin123!';
+  const adminEmail = process.env.ADMIN_EMAIL ;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminEmail || !adminPassword) {
+    throw new Error(
+      'ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required for seeding.'
+    );
+  }
 
   console.log(`Creating/updating admin user: ${adminEmail}`);
 

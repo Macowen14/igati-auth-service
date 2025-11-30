@@ -82,6 +82,12 @@ Production-ready Express.js authentication microservice with email verification,
      ```bash
      node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
      ```
+   - `OAUTH_ENCRYPTION_KEY` - Generate a secure encryption key for OAuth tokens (min 32 characters):
+     ```bash
+     openssl rand -base64 32
+     # or
+     node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+     ```
    - `APP_URL` - Your application URL (e.g., `http://localhost:4000` for dev)
    - OAuth credentials (if using social login):
      - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
@@ -661,6 +667,7 @@ Tests use Jest with Supertest. BullMQ and database are mocked in unit tests.
 | `RESEND_API_KEY`    | Resend API key for emails       | `re_xxxxxxxxxxxx`                                                                         |
 | `JWT_SECRET`        | Secret for signing JWTs         | Generate with: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` |
 | `TOKEN_HASH_SECRET` | Secret for hashing email tokens | Generate with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `OAUTH_ENCRYPTION_KEY` | Encryption key for OAuth tokens (min 32 chars) | Generate with: `openssl rand -base64 32` |
 
 ### Optional Variables
 

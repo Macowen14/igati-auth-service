@@ -56,8 +56,8 @@ model Identity {
   userId          String
   provider        String   // 'google', 'github', etc.
   providerUserId  String   // unique ID from the provider
-  accessToken     String?  // encrypted in production
-  refreshToken    String?  // encrypted in production
+  accessToken     String?  // Encrypted at application layer using AES-256-GCM
+  refreshToken    String?  // Encrypted at application layer using AES-256-GCM
   expiresAt       DateTime?
   providerMeta    Json?    // additional provider-specific data
   createdAt       DateTime @default(now())
