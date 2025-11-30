@@ -19,7 +19,7 @@ psql $DATABASE_URL -c "\dt"
 
 ```bash
 # 1. Run the SQL schema
-psql $DATABASE_URL -f database/setup.sql
+psql $DATABASE_URL -f database/schema.sql
 
 # 2. Seed admin user
 npm run seed
@@ -115,8 +115,7 @@ SELECT
 
 ## 📁 Files
 
-- `database/setup.sql` - Clean, minimal SQL (use this!)
-- `database/schema.sql` - Detailed SQL with comments
+- `database/schema.sql` - Complete SQL schema with comprehensive documentation
 - `database/README.md` - Complete documentation
 
 ## ⚠️ Troubleshooting

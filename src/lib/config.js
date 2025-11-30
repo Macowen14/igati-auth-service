@@ -50,6 +50,11 @@ const config = cleanEnv(
     // Token Hashing
     TOKEN_HASH_SECRET: str({ desc: 'Secret for HMAC hashing email verification tokens' }),
 
+    // OAuth Token Encryption
+    OAUTH_ENCRYPTION_KEY: str({
+      desc: 'Encryption key for OAuth tokens (min 32 characters). Generate with: openssl rand -base64 32',
+    }),
+
     // Cookies
     COOKIE_DOMAIN: str({ default: 'localhost', desc: 'Cookie domain' }),
     COOKIE_SECURE: bool({

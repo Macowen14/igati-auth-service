@@ -66,8 +66,8 @@ CREATE TABLE "identities" (
     "userId" TEXT NOT NULL,
     "provider" TEXT NOT NULL, -- 'google', 'github', etc.
     "providerUserId" TEXT NOT NULL, -- Unique ID from OAuth provider
-    "accessToken" TEXT, -- Encrypted in production
-    "refreshToken" TEXT, -- Encrypted in production
+    "accessToken" TEXT, -- Encrypted at application layer using AES-256-GCM
+    "refreshToken" TEXT, -- Encrypted at application layer using AES-256-GCM
     "expiresAt" TIMESTAMP(3), -- Token expiration
     "providerMeta" JSONB, -- Additional provider-specific data
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -98,10 +98,8 @@ CREATE TABLE "refresh_tokens" (
 -- =====================================================
 
 -- Unique constraint on email (enforced via index)
+-- This also serves as an index for email lookups (login, signup)
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
-
--- Index for email lookups (login, signup)
-CREATE INDEX "users_email_idx" ON "users"("email");
 
 -- =====================================================
 -- Indexes: email_tokens

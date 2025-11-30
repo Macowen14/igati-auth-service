@@ -14,6 +14,7 @@ import logger from '../lib/logger.js';
 import { generateTokenPair, hashToken } from '../utils/tokenUtils.js';
 import { emailQueue } from '../lib/queue.js';
 import config from '../lib/config.js';
+import { encryptOAuthToken, decryptOAuthToken } from '../lib/encryption.js';
 import {
   ValidationError,
   NotFoundError,
@@ -538,19 +539,35 @@ export async function findOrCreateOAuthUser({
   if (identity) {
     // Update access token if provided
     if (accessToken || refreshToken || meta) {
+      // Encrypt new tokens before storing (keep existing encrypted tokens if not updating)
+      const updateData = {
+        providerMeta: meta || identity.providerMeta,
+        updatedAt: new Date(),
+      };
+
+      // Encrypt tokens if provided
+      if (accessToken) {
+        updateData.accessToken = encryptOAuthToken(accessToken);
+      }
+      if (refreshToken) {
+        updateData.refreshToken = encryptOAuthToken(refreshToken);
+      }
+
       identity = await prisma.identity.update({
         where: { id: identity.id },
-        data: {
-          accessToken: accessToken || identity.accessToken,
-          refreshToken: refreshToken || identity.refreshToken,
-          providerMeta: meta || identity.providerMeta,
-          updatedAt: new Date(),
-        },
+        data: updateData,
         include: {
           user: true,
         },
       });
     }
+
+    // Decrypt tokens before returning (for any potential use)
+    const decryptedIdentity = {
+      ...identity,
+      accessToken: identity.accessToken ? decryptOAuthToken(identity.accessToken) : null,
+      refreshToken: identity.refreshToken ? decryptOAuthToken(identity.refreshToken) : null,
+    };
 
     return {
       user: {
@@ -558,7 +575,7 @@ export async function findOrCreateOAuthUser({
         email: identity.user.email,
         emailVerified: identity.user.emailVerified,
       },
-      identity,
+      identity: decryptedIdentity,
       isNewUser: false,
     };
   }
@@ -592,14 +609,18 @@ export async function findOrCreateOAuthUser({
       }
     }
 
-    // Create identity
+    // Encrypt OAuth tokens before storing
+    const encryptedAccessToken = accessToken ? encryptOAuthToken(accessToken) : null;
+    const encryptedRefreshToken = refreshToken ? encryptOAuthToken(refreshToken) : null;
+
+    // Create identity with encrypted tokens
     const newIdentity = await tx.identity.create({
       data: {
         userId: user.id,
         provider,
         providerUserId,
-        accessToken,
-        refreshToken,
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
         providerMeta: meta || {},
       },
     });
@@ -617,13 +638,20 @@ export async function findOrCreateOAuthUser({
     'OAuth user created or linked'
   );
 
+  // Decrypt tokens before returning (for any potential use)
+  const decryptedIdentity = {
+    ...result.identity,
+    accessToken: result.identity.accessToken ? decryptOAuthToken(result.identity.accessToken) : null,
+    refreshToken: result.identity.refreshToken ? decryptOAuthToken(result.identity.refreshToken) : null,
+  };
+
   return {
     user: {
       id: result.user.id,
       email: result.user.email,
       emailVerified: result.user.emailVerified,
     },
-    identity: result.identity,
+    identity: decryptedIdentity,
     isNewUser,
   };
 }
