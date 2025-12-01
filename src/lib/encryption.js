@@ -25,7 +25,6 @@ import logger from './logger.js';
 // GCM provides authenticated encryption (confidentiality + integrity)
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16; // 128 bits - standard for AES-GCM
-const SALT_LENGTH = 64; // 64 bytes for key derivation salt
 const TAG_LENGTH = 16; // 128 bits - authentication tag length
 const KEY_LENGTH = 32; // 256 bits for AES-256
 
