@@ -29,6 +29,7 @@ COPY prisma ./prisma
 
 # Generate Prisma client
 # Note: DATABASE_URL is not required for generation, but can be set if needed
+# TODO: Adjust the dummy DATABASE_URL if your schema requires specific connection parameters
 RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate || \
     npx prisma generate
 
