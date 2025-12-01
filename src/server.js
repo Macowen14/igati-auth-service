@@ -9,12 +9,17 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import config from './lib/config.js';
 import { createRequestLogger } from './lib/logger.js';
 import errorHandler from './middlewares/errorHandler.js';
 import authRoutes from './api/auth.js';
 import oauthRoutes from './api/oauth.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Create Express application
@@ -77,6 +82,13 @@ app.use((req, res, next) => {
 
   next();
 });
+
+/**
+ * Static file serving for uploaded images
+ * Serves files from the uploads directory
+ */
+const uploadsDir = path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadsDir));
 
 /**
  * Health check endpoint

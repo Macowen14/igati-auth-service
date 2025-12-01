@@ -342,6 +342,90 @@ Get current authenticated user information.
 
 ---
 
+#### GET `/api/auth/profile`
+
+Get current user's complete profile information including name and avatar.
+
+**Request:** Requires access token cookie
+
+**Success Response (200):**
+
+```json
+{
+  "profile": {
+    "id": "uuid",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "avatarUrl": "http://localhost:4000/uploads/image-1234567890-123456789.jpg",
+    "emailVerified": true,
+    "createdAt": "2025-11-29T19:00:00.000Z",
+    "updatedAt": "2025-11-29T19:00:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+
+- `401 Unauthorized` - Missing or invalid access token
+- `404 Not Found` - User not found
+
+---
+
+#### PUT `/api/auth/profile`
+
+Update current user's profile. Supports updating name and uploading avatar image.
+
+**Request:** Requires access token cookie
+
+**Content-Type:** `multipart/form-data` (for file upload) or `application/json`
+
+**Form Data:**
+
+- `name` (optional, string) - User's display name (max 100 characters)
+- `avatar` (optional, file) - Image file (JPEG, PNG, GIF, WebP, max 5MB)
+
+**OR JSON Body:**
+
+```json
+{
+  "name": "John Doe",
+  "avatarUrl": "http://example.com/avatar.jpg"
+}
+```
+
+**Success Response (200):**
+
+```json
+{
+  "message": "Profile updated successfully",
+  "profile": {
+    "id": "uuid",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "avatarUrl": "http://localhost:4000/uploads/image-1234567890-123456789.jpg",
+    "emailVerified": true,
+    "createdAt": "2025-11-29T19:00:00.000Z",
+    "updatedAt": "2025-11-29T20:00:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+
+- `400 Bad Request` - Invalid file type, file too large (>5MB), or validation error
+- `401 Unauthorized` - Missing or invalid access token
+- `404 Not Found` - User not found
+
+**Notes:**
+
+- Image files are stored in the `uploads/` directory
+- Uploaded images are accessible via `/uploads/{filename}` URL
+- Maximum file size: 5MB
+- Allowed formats: JPEG, PNG, GIF, WebP
+- If uploading a file, the `avatarUrl` will be automatically generated
+
+---
+
 ### OAuth Endpoints
 
 #### GET `/api/auth/oauth/google`
@@ -548,9 +632,12 @@ auth_service/
 │   ├── middlewares/          # Express middlewares
 │   │   ├── errorHandler.js  # Centralized error handling
 │   │   ├── asyncHandler.js  # Async route wrapper
-│   │   └── rateLimiter.js   # Rate limiting
+│   │   ├── rateLimiter.js   # Rate limiting
+│   │   ├── authenticate.js  # JWT authentication middleware
+│   │   └── upload.js        # File upload middleware (multer)
 │   ├── services/             # Business logic
-│   │   └── authService.js   # Auth operations
+│   │   ├── authService.js   # Auth operations
+│   │   └── profileService.js # Profile operations
 │   ├── workers/              # Background workers
 │   │   └── emailWorker.js   # Email job processor
 │   ├── utils/                # Utilities
@@ -566,6 +653,7 @@ auth_service/
 ├── logs/                    # Log files (auto-created)
 │   ├── app.log              # Info+ logs (JSON)
 │   └── debug.log            # Debug logs (JSON)
+├── uploads/                 # Uploaded user images (auto-created)
 ├── docker-compose.yml       # Docker Compose config
 ├── Dockerfile               # Docker image definition
 ├── .env.example             # Environment template
@@ -660,14 +748,14 @@ Tests use Jest with Supertest. BullMQ and database are mocked in unit tests.
 
 ### Required Variables
 
-| Variable            | Description                     | Example                                                                                   |
-| ------------------- | ------------------------------- | ----------------------------------------------------------------------------------------- |
-| `DATABASE_URL`      | PostgreSQL connection string    | `postgresql://user:pass@host:5432/dbname`                                                 |
-| `REDIS_URL`         | Redis connection URL            | `redis://localhost:6379`                                                                  |
-| `RESEND_API_KEY`    | Resend API key for emails       | `re_xxxxxxxxxxxx`                                                                         |
-| `JWT_SECRET`        | Secret for signing JWTs         | Generate with: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` |
-| `TOKEN_HASH_SECRET` | Secret for hashing email tokens | Generate with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `OAUTH_ENCRYPTION_KEY` | Encryption key for OAuth tokens (min 32 chars) | Generate with: `openssl rand -base64 32` |
+| Variable               | Description                                    | Example                                                                                   |
+| ---------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `DATABASE_URL`         | PostgreSQL connection string                   | `postgresql://user:pass@host:5432/dbname`                                                 |
+| `REDIS_URL`            | Redis connection URL                           | `redis://localhost:6379`                                                                  |
+| `RESEND_API_KEY`       | Resend API key for emails                      | `re_xxxxxxxxxxxx`                                                                         |
+| `JWT_SECRET`           | Secret for signing JWTs                        | Generate with: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` |
+| `TOKEN_HASH_SECRET`    | Secret for hashing email tokens                | Generate with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `OAUTH_ENCRYPTION_KEY` | Encryption key for OAuth tokens (min 32 chars) | Generate with: `openssl rand -base64 32`                                                  |
 
 ### Optional Variables
 
@@ -752,10 +840,33 @@ docker run -d \
 - [ ] `COOKIE_SECURE=true` set in production
 - [ ] `NODE_ENV=production` set
 - [ ] Strong `JWT_SECRET` and `TOKEN_HASH_SECRET` generated
+- [ ] Redis `maxmemory-policy` set to `noeviction` (see Redis Configuration below)
 - [ ] Rate limiting configured appropriately
 - [ ] Log aggregation set up
 - [ ] Health checks configured for load balancer
 - [ ] Worker process running separately
+- [ ] Uploads directory created and writable
+
+### Redis Configuration
+
+For production, Redis should be configured with `maxmemory-policy noeviction` to prevent BullMQ jobs from being evicted when Redis runs out of memory. This can be done in several ways:
+
+**Option 1: Configure via Redis CLI (recommended for managed Redis)**
+
+```bash
+redis-cli CONFIG SET maxmemory-policy noeviction
+```
+
+**Option 2: Configure in redis.conf**
+
+```
+maxmemory-policy noeviction
+```
+
+**Option 3: Call the configuration function at startup**
+The application includes a `configureRedisMemoryPolicy()` function in `src/lib/queue.js` that can be called during startup. However, this may not work if Redis is managed externally or doesn't allow runtime configuration changes.
+
+**Note:** For managed Redis services (AWS ElastiCache, Redis Cloud, etc.), configure this through the service's management console or configuration interface.
 
 ### Process Manager (PM2)
 

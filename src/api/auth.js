@@ -30,6 +30,15 @@ import {
   getTokenFromCookie,
 } from '../lib/jwt.js';
 import { hashToken } from '../utils/tokenUtils.js';
+import authenticate from '../middlewares/authenticate.js';
+import { getUserProfile, updateUserProfile } from '../services/profileService.js';
+import { upload, handleUploadError } from '../middlewares/upload.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import config from '../lib/config.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
@@ -355,6 +364,82 @@ router.get(
         id: payload.userId,
         email: payload.email,
       },
+    });
+  })
+);
+
+/**
+ * GET /api/auth/profile
+ *
+ * Get current user's profile information.
+ * Requires authentication.
+ */
+router.get(
+  '/profile',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const profile = await getUserProfile(req.user.id);
+
+    req.logger.debug({ userId: req.user.id }, 'Profile retrieved');
+
+    res.status(200).json({
+      profile,
+    });
+  })
+);
+
+/**
+ * PUT /api/auth/profile
+ *
+ * Update current user's profile.
+ * Supports updating name and avatar image.
+ * Requires authentication.
+ *
+ * Body (multipart/form-data):
+ * - name?: string - User's display name
+ * - avatar?: File - Image file (JPEG, PNG, GIF, WebP, max 5MB)
+ *
+ * OR Body (application/json):
+ * - name?: string - User's display name
+ * - avatarUrl?: string - URL to avatar image
+ */
+router.put(
+  '/profile',
+  authenticate,
+  upload.single('avatar'),
+  handleUploadError,
+  asyncHandler(async (req, res) => {
+    const updates = {};
+
+    // Handle name from form data or JSON body
+    if (req.body.name !== undefined) {
+      updates.name = req.body.name;
+    }
+
+    // Handle avatar upload
+    if (req.file) {
+      // File was uploaded - construct URL
+      const baseUrl = config.APP_URL.replace(/\/$/, ''); // Remove trailing slash
+      const fileName = req.file.filename;
+      updates.avatarUrl = `${baseUrl}/uploads/${fileName}`;
+
+      req.logger.debug(
+        { userId: req.user.id, fileName },
+        'Avatar file uploaded'
+      );
+    } else if (req.body.avatarUrl !== undefined) {
+      // Avatar URL provided directly (for JSON requests)
+      updates.avatarUrl = req.body.avatarUrl;
+    }
+
+    // Update profile
+    const updatedProfile = await updateUserProfile(req.user.id, updates);
+
+    req.logger.info({ userId: req.user.id }, 'Profile updated');
+
+    res.status(200).json({
+      message: 'Profile updated successfully',
+      profile: updatedProfile,
     });
   })
 );

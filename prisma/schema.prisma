@@ -19,6 +19,8 @@ model User {
   email         String    @unique
   passwordHash  String?   // null for social-only users
   emailVerified Boolean   @default(false)
+  name          String?   // User's display name
+  avatarUrl     String?   // URL to user's profile image
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
