@@ -25,7 +25,7 @@ services:
       PORT: ${PORT:-4000}
       APP_URL: ${APP_URL}
       # Optional with defaults
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-noreply@example.com}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-info@mail.chattzy.site}
       JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
       JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-30d}
       EMAIL_TOKEN_EXPIRY_HOURS: ${EMAIL_TOKEN_EXPIRY_HOURS:-24}
