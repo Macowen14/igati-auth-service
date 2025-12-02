@@ -228,6 +228,7 @@ export async function verifyEmailToken(token) {
         id: true,
         email: true,
         emailVerified: true,
+        role: true,
         createdAt: true,
       },
     });
@@ -396,6 +397,7 @@ export async function authenticateUser({ email, password }) {
     id: user.id,
     email: user.email,
     emailVerified: user.emailVerified,
+    role: user.role || 'USER', // Include role, default to USER for backward compatibility
     createdAt: user.createdAt,
   };
 }
@@ -574,6 +576,7 @@ export async function findOrCreateOAuthUser({
         id: identity.user.id,
         email: identity.user.email,
         emailVerified: identity.user.emailVerified,
+        role: identity.user.role || 'USER',
       },
       identity: decryptedIdentity,
       isNewUser: false,
@@ -641,8 +644,12 @@ export async function findOrCreateOAuthUser({
   // Decrypt tokens before returning (for any potential use)
   const decryptedIdentity = {
     ...result.identity,
-    accessToken: result.identity.accessToken ? decryptOAuthToken(result.identity.accessToken) : null,
-    refreshToken: result.identity.refreshToken ? decryptOAuthToken(result.identity.refreshToken) : null,
+    accessToken: result.identity.accessToken
+      ? decryptOAuthToken(result.identity.accessToken)
+      : null,
+    refreshToken: result.identity.refreshToken
+      ? decryptOAuthToken(result.identity.refreshToken)
+      : null,
   };
 
   return {
@@ -650,6 +657,7 @@ export async function findOrCreateOAuthUser({
       id: result.user.id,
       email: result.user.email,
       emailVerified: result.user.emailVerified,
+      role: result.user.role || 'USER',
     },
     identity: decryptedIdentity,
     isNewUser,

@@ -133,8 +133,8 @@ if (config.GITHUB_CLIENT_ID && config.GITHUB_CLIENT_SECRET) {
  */
 async function handleOAuthSuccess(user, req, res) {
   try {
-    // Create JWT tokens
-    const accessToken = await createAccessToken(user.id, user.email);
+    // Create JWT tokens (include role)
+    const accessToken = await createAccessToken(user.id, user.email, user.role || 'USER');
     const refreshToken = await createRefreshToken(user.id);
 
     // Store refresh token hash in database

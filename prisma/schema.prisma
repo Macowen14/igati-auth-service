@@ -13,6 +13,14 @@ datasource db {
   // directUrl = env("DIRECT_URL")
 }
 
+// User role enum - defines access levels
+enum UserRole {
+  USER      // Regular user (default)
+  MANAGER   // Manager role
+  ADMIN     // Admin role
+  SUPERUSER // Superuser (only one allowed)
+}
+
 // User model - core authentication entity
 model User {
   id            String    @id @default(uuid())
@@ -21,15 +29,18 @@ model User {
   emailVerified Boolean   @default(false)
   name          String?   // User's display name
   avatarUrl     String?   // URL to user's profile image
+  role          UserRole  @default(USER) // User role for access control
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   // Relations
-  identities    Identity[]
-  emailTokens   EmailToken[]
-  refreshTokens RefreshToken[]
+  identities         Identity[]
+  emailTokens        EmailToken[]
+  refreshTokens      RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([email])
+  @@index([role])
   @@map("users")
 }
 
@@ -90,5 +101,24 @@ model RefreshToken {
   @@index([tokenHash])
   @@index([userId, revoked])
   @@map("refresh_tokens")
+}
+
+// PasswordResetToken model - stores password reset tokens
+// Tokens are hashed before storage for security
+model PasswordResetToken {
+  id          String   @id @default(uuid())
+  userId      String
+  tokenHash   String   // HMAC-SHA256 hash of the plain token
+  used        Boolean  @default(false)
+  expiresAt   DateTime
+  emailSentAt DateTime? // timestamp when email was actually sent
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash, used, expiresAt])
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 

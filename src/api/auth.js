@@ -33,12 +33,9 @@ import { hashToken } from '../utils/tokenUtils.js';
 import authenticate from '../middlewares/authenticate.js';
 import { getUserProfile, updateUserProfile } from '../services/profileService.js';
 import { upload, handleUploadError } from '../middlewares/upload.js';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { requestPasswordReset, resetPassword } from '../services/passwordResetService.js';
 import config from '../lib/config.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import prisma from '../lib/prisma.js';
 
 const router = express.Router();
 
@@ -145,8 +142,8 @@ router.get(
     // Verify token and mark user as verified
     const { user } = await verifyEmailToken(token);
 
-    // Create JWT tokens
-    const accessToken = await createAccessToken(user.id, user.email);
+    // Create JWT tokens (include role)
+    const accessToken = await createAccessToken(user.id, user.email, user.role || 'USER');
     const refreshToken = await createRefreshToken(user.id);
 
     // Store refresh token hash in database for rotation/revocation
@@ -189,8 +186,8 @@ router.post(
     // Authenticate user
     const user = await authenticateUser({ email, password });
 
-    // Create JWT tokens
-    const accessToken = await createAccessToken(user.id, user.email);
+    // Create JWT tokens (include role)
+    const accessToken = await createAccessToken(user.id, user.email, user.role || 'USER');
     const refreshToken = await createRefreshToken(user.id);
 
     // Store refresh token hash in database
@@ -212,6 +209,70 @@ router.post(
         emailVerified: user.emailVerified,
       },
     });
+  })
+);
+
+/**
+ * POST /api/auth/forgot-password
+ *
+ * Request password reset. Sends reset token to user's email.
+ * Returns generic message to prevent user enumeration.
+ *
+ * Body: { email: string }
+ */
+router.post(
+  '/forgot-password',
+  authRateLimiter,
+  asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        error: {
+          code: 'ValidationError',
+          message: 'Email is required',
+        },
+      });
+    }
+
+    req.logger.debug({ email }, 'Password reset request');
+
+    // Request password reset (returns generic message)
+    const result = await requestPasswordReset(email);
+
+    res.status(200).json(result);
+  })
+);
+
+/**
+ * POST /api/auth/reset-password
+ *
+ * Reset password using token from email.
+ * Verifies token and updates user password.
+ *
+ * Body: { token: string, password: string }
+ */
+router.post(
+  '/reset-password',
+  authRateLimiter,
+  asyncHandler(async (req, res) => {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({
+        error: {
+          code: 'ValidationError',
+          message: 'Token and password are required',
+        },
+      });
+    }
+
+    req.logger.debug({ token: token.substring(0, 8) + '...' }, 'Password reset attempt');
+
+    // Reset password
+    const result = await resetPassword(token, password);
+
+    res.status(200).json(result);
   })
 );
 
@@ -272,8 +333,18 @@ router.post(
     // Revoke old refresh token (token rotation)
     await revokeRefreshToken(refreshTokenHash);
 
-    // Create new tokens
-    const newAccessToken = await createAccessToken(tokenData.user.id, tokenData.user.email);
+    // Create new tokens (include role from database)
+    // Fetch fresh user data to get current role
+    const freshUser = await prisma.user.findUnique({
+      where: { id: tokenData.user.id },
+      select: { role: true },
+    });
+    const userRole = freshUser?.role || 'USER';
+    const newAccessToken = await createAccessToken(
+      tokenData.user.id,
+      tokenData.user.email,
+      userRole
+    );
     const newRefreshToken = await createRefreshToken(tokenData.user.id);
 
     // Store new refresh token hash
@@ -423,10 +494,7 @@ router.put(
       const fileName = req.file.filename;
       updates.avatarUrl = `${baseUrl}/uploads/${fileName}`;
 
-      req.logger.debug(
-        { userId: req.user.id, fileName },
-        'Avatar file uploaded'
-      );
+      req.logger.debug({ userId: req.user.id, fileName }, 'Avatar file uploaded');
     } else if (req.body.avatarUrl !== undefined) {
       // Avatar URL provided directly (for JSON requests)
       updates.avatarUrl = req.body.avatarUrl;

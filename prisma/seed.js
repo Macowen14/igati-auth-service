@@ -20,10 +20,9 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Starting database seeding...');
 
-  // Create admin user (if not exists)
-  // Set ADMIN_PASSWORD environment variable to customize password
-  // Default password: Admin123!
-  const adminEmail = process.env.ADMIN_EMAIL ;
+  // Create superuser (if not exists)
+  // Set ADMIN_EMAIL and ADMIN_PASSWORD environment variables
+  const adminEmail = process.env.ADMIN_EMAIL;
   const adminPassword = process.env.ADMIN_PASSWORD;
 
   if (!adminEmail || !adminPassword) {
@@ -32,9 +31,22 @@ async function main() {
     );
   }
 
-  console.log(`Creating/updating admin user: ${adminEmail}`);
+  console.log(`Creating/updating superuser: ${adminEmail}`);
 
-  // Hash password for admin user
+  // Check if a superuser already exists
+  const existingSuperuser = await prisma.user.findFirst({
+    where: { role: 'SUPERUSER' },
+  });
+
+  if (existingSuperuser && existingSuperuser.email !== adminEmail) {
+    console.warn(
+      `⚠️  Warning: A superuser already exists (${existingSuperuser.email}). Skipping superuser creation.`
+    );
+    console.log('Database seeding completed.');
+    return;
+  }
+
+  // Hash password for superuser
   const passwordHash = await argon2.hash(adminPassword, {
     type: argon2.argon2id,
     memoryCost: 65536,
@@ -42,26 +54,28 @@ async function main() {
     parallelism: 4,
   });
 
-  // Create or update admin user
+  // Create or update superuser
   const adminUser = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {
       // Update password if user already exists (optional - comment out to preserve existing password)
-      // TODO: edit update
       // passwordHash,
-      emailVerified: true, // Ensure admin email is always verified
+      emailVerified: true, // Ensure superuser email is always verified
+      role: 'SUPERUSER', // Ensure role is set to SUPERUSER
     },
     create: {
       email: adminEmail,
       passwordHash,
-      emailVerified: true, // Admin users are pre-verified
+      emailVerified: true, // Superuser is pre-verified
+      role: 'SUPERUSER', // Set as superuser
     },
   });
 
-  console.log('✅ Admin user created/updated:', {
+  console.log('✅ Superuser created/updated:', {
     id: adminUser.id,
     email: adminUser.email,
     emailVerified: adminUser.emailVerified,
+    role: adminUser.role,
   });
 
   console.log('Database seeding completed.');
