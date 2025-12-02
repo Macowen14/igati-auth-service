@@ -6,6 +6,12 @@
  *
  * Configured for Neon (serverless PostgreSQL) which closes idle connections.
  * Automatically reconnects when connections are closed due to inactivity.
+ *
+ * IMPORTANT for Neon:
+ * - Use the connection pooler URL (ends with -pooler) for better connection management
+ * - Example: postgresql://user:pass@ep-xxx-pooler.us-east-1.aws.neon.tech/db?sslmode=require
+ * - The pooler handles connection lifecycle automatically
+ * - This module adds automatic reconnection for additional reliability
  */
 
 import pkg from '@prisma/client';
@@ -112,29 +118,9 @@ async function connectWithRetry() {
 }
 
 /**
- * Handle connection errors and attempt reconnection
- * Called when Prisma detects a connection error
+ * Handle Prisma query engine errors
+ * Note: Prisma doesn't have a direct $on('error') event, so we handle errors in queries
  */
-prisma.$on('error' as never, (e: any) => {
-  const errorMessage = e.message || String(e);
-  
-  // Check if connection was closed
-  if (
-    errorMessage.includes('Closed') ||
-    errorMessage.includes("Can't reach database server") ||
-    errorMessage.includes('Connection terminated')
-  ) {
-    logger.warn(
-      {
-        error: errorMessage,
-      },
-      'Database connection lost. Will attempt to reconnect on next query.'
-    );
-    isConnected = false;
-  } else {
-    logger.error({ error: errorMessage }, 'Database error');
-  }
-});
 
 /**
  * Initialize connection on module load
@@ -154,10 +140,12 @@ connectWithRetry().catch((error) => {
  */
 export async function disconnect() {
   try {
+    isConnected = false;
     await prisma.$disconnect();
     logger.info('Database disconnected');
   } catch (error) {
     logger.error({ error }, 'Error disconnecting from database');
+    isConnected = false;
     throw error;
   }
 }
@@ -216,25 +204,23 @@ async function executeWithReconnect(queryFn) {
 
 /**
  * Wrapped Prisma client with automatic reconnection
- * All queries go through this wrapper to handle connection errors
+ * All queries automatically retry on connection errors
  */
 const prismaWithReconnect = new Proxy(prisma, {
   get(target, prop) {
     const value = target[prop];
     
-    // Wrap query methods to handle reconnection
-    if (
-      typeof value === 'function' &&
-      (prop.startsWith('$') || 
-       prop.includes('find') || 
-       prop.includes('create') || 
-       prop.includes('update') || 
-       prop.includes('delete') ||
-       prop.includes('upsert') ||
-       prop.includes('count') ||
-       prop.includes('aggregate'))
-    ) {
+    // Wrap all Prisma methods to handle reconnection
+    if (typeof value === 'function') {
       return function (...args) {
+        // For transaction methods, wrap differently
+        if (prop === '$transaction') {
+          return value.apply(target, args).catch((error) => {
+            return handleConnectionError(error, () => value.apply(target, args));
+          });
+        }
+        
+        // For all other methods, use executeWithReconnect
         return executeWithReconnect(() => value.apply(target, args));
       };
     }
@@ -242,6 +228,35 @@ const prismaWithReconnect = new Proxy(prisma, {
     return value;
   },
 });
+
+/**
+ * Handle connection errors with better error messages
+ */
+async function handleConnectionError(error, retryFn) {
+  const errorMessage = error.message || String(error);
+  
+  if (
+    errorMessage.includes('Closed') ||
+    errorMessage.includes("Can't reach database server") ||
+    errorMessage.includes('Connection terminated') ||
+    errorMessage.includes('Connection refused')
+  ) {
+    isConnected = false;
+    
+    try {
+      await connectWithRetry();
+      return await retryFn();
+    } catch (reconnectError) {
+      const reconnectErrorMessage = reconnectError.message || String(reconnectError);
+      throw new Error(
+        `Database connection failed: ${reconnectErrorMessage}. ` +
+        `Please verify: 1) DATABASE_URL is correct, 2) Database server is running, 3) Network connectivity.`
+      );
+    }
+  }
+  
+  throw error;
+}
 
 /**
  * Health check: verify database connection
