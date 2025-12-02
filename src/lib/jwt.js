@@ -44,15 +44,17 @@ function parseExpiry(expiry) {
  *
  * @param {string} userId - User ID to encode
  * @param {string} email - User email (for logging/debugging)
+ * @param {string} role - User role (optional, defaults to 'USER')
  * @returns {Promise<string>} Signed JWT token
  */
-export async function createAccessToken(userId, email) {
+export async function createAccessToken(userId, email, role = 'USER') {
   const secret = new TextEncoder().encode(config.JWT_SECRET);
   const expiresIn = parseExpiry(config.JWT_ACCESS_EXPIRY);
 
   const token = await new SignJWT({
     userId,
     email,
+    role,
     type: 'access',
   })
     .setProtectedHeader({ alg: 'HS256' })
@@ -94,7 +96,7 @@ export async function createRefreshToken(userId) {
 /**
  * Verify and decode a JWT token
  * @param {string} token - JWT token to verify
- * @returns {Promise<{userId: string, email?: string, type: string}>} Decoded payload
+ * @returns {Promise<{userId: string, email?: string, role?: string, type: string}>} Decoded payload
  * @throws {Error} If token is invalid or expired
  */
 export async function verifyToken(token) {
@@ -108,6 +110,7 @@ export async function verifyToken(token) {
     return {
       userId: payload.userId,
       email: payload.email,
+      role: payload.role || 'USER', // Default to USER for backward compatibility
       type: payload.type,
     };
   } catch (error) {

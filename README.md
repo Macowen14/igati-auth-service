@@ -426,6 +426,177 @@ Update current user's profile. Supports updating name and uploading avatar image
 
 ---
 
+#### POST `/api/auth/forgot-password`
+
+Request a password reset. Sends a reset token to the user's email address.
+
+**Request Body:**
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Success Response (200):**
+
+```json
+{
+  "message": "If an account exists with this email, a password reset link has been sent"
+}
+```
+
+**Error Responses:**
+
+- `400 Bad Request` - Email is required
+- `429 Too Many Requests` - Rate limit exceeded
+
+**Rate Limit:** 5 requests per 15 minutes per IP
+
+**Note:** Returns a generic message to prevent user enumeration attacks.
+
+---
+
+#### POST `/api/auth/reset-password`
+
+Reset password using token from email.
+
+**Request Body:**
+
+```json
+{
+  "token": "reset_token_from_email",
+  "password": "NewSecurePass123"
+}
+```
+
+**Success Response (200):**
+
+```json
+{
+  "message": "Password has been reset successfully. Please log in with your new password."
+}
+```
+
+**Error Responses:**
+
+- `400 Bad Request` - Token or password missing, invalid password format, or weak password
+- `404 Not Found` - Invalid or expired reset token
+- `429 Too Many Requests` - Rate limit exceeded
+
+**Notes:**
+
+- Reset tokens expire after 1 hour
+- All existing refresh tokens are revoked after password reset (forces re-login)
+- Password must meet strength requirements (8+ chars, uppercase, lowercase, number)
+
+---
+
+### Admin Endpoints
+
+**All admin endpoints require authentication and ADMIN or SUPERUSER role.**
+
+#### GET `/api/auth/admin/users`
+
+Get all users (excluding password hashes). Requires ADMIN or SUPERUSER role.
+
+**Request:** Requires access token cookie with ADMIN or SUPERUSER role
+
+**Query Parameters:**
+
+- `page` (optional, default: 1) - Page number
+- `limit` (optional, default: 50, max: 100) - Items per page
+
+**Success Response (200):**
+
+```json
+{
+  "users": [
+    {
+      "id": "uuid",
+      "email": "user@example.com",
+      "name": "John Doe",
+      "avatarUrl": "http://localhost:4000/uploads/image.jpg",
+      "emailVerified": true,
+      "role": "USER",
+      "createdAt": "2025-11-29T19:00:00.000Z",
+      "updatedAt": "2025-11-29T19:00:00.000Z"
+    }
+  ],
+  "total": 100,
+  "page": 1,
+  "limit": 50,
+  "totalPages": 2
+}
+```
+
+**Error Responses:**
+
+- `401 Unauthorized` - Not authenticated
+- `403 Forbidden` - Insufficient permissions (not ADMIN or SUPERUSER)
+
+---
+
+#### PUT `/api/auth/admin/users/:userId/role`
+
+Update user role. Requires ADMIN or SUPERUSER role. Only SUPERUSER can assign SUPERUSER role.
+
+**Request:** Requires access token cookie with ADMIN or SUPERUSER role
+
+**URL Parameters:**
+
+- `userId` (required) - User ID to update
+
+**Request Body:**
+
+```json
+{
+  "role": "ADMIN"
+}
+```
+
+**Valid Roles:**
+
+- `USER` - Regular user (default)
+- `MANAGER` - Manager role
+- `ADMIN` - Admin role
+- `SUPERUSER` - Superuser (only one allowed, only SUPERUSER can assign)
+
+**Success Response (200):**
+
+```json
+{
+  "message": "User role updated successfully",
+  "user": {
+    "id": "uuid",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "avatarUrl": null,
+    "emailVerified": true,
+    "role": "ADMIN",
+    "createdAt": "2025-11-29T19:00:00.000Z",
+    "updatedAt": "2025-11-29T20:00:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+
+- `400 Bad Request` - Role is required or invalid role value
+- `401 Unauthorized` - Not authenticated
+- `403 Forbidden` - Insufficient permissions (only SUPERUSER can assign SUPERUSER role)
+- `404 Not Found` - User not found
+- `409 Conflict` - User already has that role, or superuser already exists
+
+**Role System:**
+
+- **SUPERUSER**: Highest privilege level. Only one superuser can exist. Can assign any role.
+- **ADMIN**: Can manage users and assign USER, MANAGER, or ADMIN roles (not SUPERUSER).
+- **MANAGER**: Manager-level access (can be extended for custom permissions).
+- **USER**: Default role for all new users.
+
+---
+
 ### OAuth Endpoints
 
 #### GET `/api/auth/oauth/google`

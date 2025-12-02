@@ -17,6 +17,7 @@ import { createRequestLogger } from './lib/logger.js';
 import errorHandler from './middlewares/errorHandler.js';
 import authRoutes from './api/auth.js';
 import oauthRoutes from './api/oauth.js';
+import adminRoutes from './api/admin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -133,6 +134,7 @@ app.get('/health', async (req, res) => {
  */
 app.use('/api/auth', authRoutes);
 app.use('/api/auth/oauth', oauthRoutes);
+app.use('/api/auth/admin', adminRoutes);
 
 /**
  * 404 handler
