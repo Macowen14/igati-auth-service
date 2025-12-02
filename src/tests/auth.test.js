@@ -1,55 +1,48 @@
 /**
  * Authentication Tests
  *
- * Jest + Supertest test skeleton for auth flows.
- * Tests signup, email verification, and login endpoints.
+ * Comprehensive test suite for authentication endpoints.
+ * Tests signup, email verification, login, logout, refresh, and password reset.
  *
  * Note: These tests use mocks to avoid requiring real Redis/Database during tests.
- * For integration tests, use a real test database and Redis instance.
  */
 
+import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import request from 'supertest';
-import app from '../server.js';
+import argon2 from 'argon2';
 
-// Mock BullMQ to avoid requiring real Redis
-jest.mock('../lib/queue.js', () => {
-  const mockAdd = jest.fn().mockResolvedValue({ id: 'mock-job-id' });
-  return {
-    emailQueue: {
-      add: mockAdd,
-      close: jest.fn().mockResolvedValue(),
-    },
-    closeConnections: jest.fn().mockResolvedValue(),
-    healthCheck: jest.fn().mockResolvedValue(true),
-  };
-});
+// Create mock functions before mocking modules
+const mockEmailQueue = {
+  add: jest.fn().mockResolvedValue({ id: 'mock-job-id' }),
+  close: jest.fn().mockResolvedValue(),
+};
 
-// Mock JWT functions
-jest.mock('../lib/jwt.js', () => ({
+const mockJWT = {
   createAccessToken: jest.fn().mockResolvedValue('mock-access-token'),
   createRefreshToken: jest.fn().mockResolvedValue('mock-refresh-token'),
   verifyToken: jest.fn(),
   setAuthCookies: jest.fn(),
   clearAuthCookies: jest.fn(),
   getTokenFromCookie: jest.fn(),
-}));
+};
 
-// Mock token utils
-jest.mock('../utils/tokenUtils.js', () => ({
+const mockTokenUtils = {
   generateTokenPair: jest.fn().mockReturnValue({
     token: 'mock-plain-token',
     hash: 'mock-token-hash',
   }),
   hashToken: jest.fn().mockReturnValue('mock-token-hash'),
   verifyToken: jest.fn().mockReturnValue(true),
-}));
+};
 
-// Mock Prisma client for unit tests
 const mockPrisma = {
   user: {
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    findMany: jest.fn(),
+    count: jest.fn(),
   },
   emailToken: {
     create: jest.fn(),
@@ -60,16 +53,46 @@ const mockPrisma = {
   refreshToken: {
     create: jest.fn(),
     findFirst: jest.fn(),
+    findMany: jest.fn(),
+    updateMany: jest.fn(),
+  },
+  passwordResetToken: {
+    create: jest.fn(),
+    findFirst: jest.fn(),
+    update: jest.fn(),
     updateMany: jest.fn(),
   },
   $transaction: jest.fn(),
+  $queryRaw: jest.fn(),
 };
+
+// Create additional mock functions for module mocks
+const mockCloseConnections = jest.fn().mockResolvedValue();
+const mockQueueHealthCheck = jest.fn().mockResolvedValue(true);
+const mockConfigureRedis = jest.fn().mockResolvedValue();
+const mockDisconnect = jest.fn().mockResolvedValue();
+const mockPrismaHealthCheck = jest.fn().mockResolvedValue(true);
+
+// Mock modules - must be before imports
+jest.mock('../lib/queue.js', () => ({
+  emailQueue: mockEmailQueue,
+  closeConnections: mockCloseConnections,
+  healthCheck: mockQueueHealthCheck,
+  configureRedisMemoryPolicy: mockConfigureRedis,
+}));
+
+jest.mock('../lib/jwt.js', () => mockJWT);
+
+jest.mock('../utils/tokenUtils.js', () => mockTokenUtils);
 
 jest.mock('../lib/prisma.js', () => ({
   default: mockPrisma,
-  disconnect: jest.fn().mockResolvedValue(),
-  healthCheck: jest.fn().mockResolvedValue(true),
+  disconnect: mockDisconnect,
+  healthCheck: mockPrismaHealthCheck,
 }));
+
+// Import app after mocks are set up
+import app from '../server.js';
 
 describe('POST /api/auth/signup', () => {
   beforeEach(() => {
@@ -88,6 +111,7 @@ describe('POST /api/auth/signup', () => {
             id: 'new-user-id',
             email: 'test@example.com',
             emailVerified: false,
+            role: 'USER',
             createdAt: new Date(),
           }),
         },
@@ -104,11 +128,21 @@ describe('POST /api/auth/signup', () => {
     const response = await request(app).post('/api/auth/signup').send({
       email: 'test@example.com',
       password: 'ValidPassword123',
+      name: 'Test User',
     });
 
     expect(response.status).toBe(201);
     expect(response.body.message).toContain('Account created successfully');
     expect(response.body.user.email).toBe('test@example.com');
+    expect(response.body.user.emailVerified).toBe(false);
+    expect(mockEmailQueue.add).toHaveBeenCalledWith(
+      'sendVerification',
+      expect.objectContaining({
+        type: 'sendVerification',
+        email: 'test@example.com',
+      }),
+      expect.any(Object)
+    );
   });
 
   it('should reject signup with invalid email', async () => {
@@ -129,6 +163,22 @@ describe('POST /api/auth/signup', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('ValidationError');
+  });
+
+  it('should reject signup with missing email', async () => {
+    const response = await request(app).post('/api/auth/signup').send({
+      password: 'ValidPassword123',
+    });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('should reject signup with missing password', async () => {
+    const response = await request(app).post('/api/auth/signup').send({
+      email: 'test@example.com',
+    });
+
+    expect(response.status).toBe(400);
   });
 
   it('should reject duplicate email signup', async () => {
@@ -158,6 +208,7 @@ describe('GET /api/auth/verify', () => {
       id: 'user-id',
       email: 'test@example.com',
       emailVerified: false,
+      role: 'USER',
     };
 
     // Mock finding valid token
@@ -177,17 +228,28 @@ describe('GET /api/auth/verify', () => {
           update: jest.fn().mockResolvedValue({
             ...mockUser,
             emailVerified: true,
+            role: 'USER',
           }),
         },
       };
       return callback(tx);
     });
 
+    // Mock refresh token storage
+    mockPrisma.refreshToken.create.mockResolvedValue({
+      id: 'refresh-token-id',
+      userId: 'user-id',
+    });
+
+    mockJWT.createAccessToken.mockResolvedValue('access-token');
+    mockJWT.createRefreshToken.mockResolvedValue('refresh-token');
+
     const response = await request(app).get('/api/auth/verify').query({ token: 'valid-token' });
 
-    // Note: This will fail because we need to mock storeRefreshToken
-    // For a complete test, you'd need to mock the full authService
     expect(response.status).toBe(200);
+    expect(response.body.message).toContain('Email verified successfully');
+    expect(response.body.user.emailVerified).toBe(true);
+    expect(mockJWT.setAuthCookies).toHaveBeenCalled();
   });
 
   it('should reject missing token', async () => {
@@ -197,7 +259,7 @@ describe('GET /api/auth/verify', () => {
     expect(response.body.error.code).toBe('ValidationError');
   });
 
-  it('should reject expired token', async () => {
+  it('should reject expired or invalid token', async () => {
     // Mock no token found (expired or invalid)
     mockPrisma.emailToken.findFirst.mockResolvedValue(null);
 
@@ -213,14 +275,43 @@ describe('POST /api/auth/login', () => {
     jest.clearAllMocks();
   });
 
+  it('should login user with valid credentials', async () => {
+    const passwordHash = await argon2.hash('ValidPassword123');
+    const mockUser = {
+      id: 'user-id',
+      email: 'test@example.com',
+      passwordHash,
+      emailVerified: true,
+      role: 'USER',
+    };
+
+    mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+    mockPrisma.refreshToken.create.mockResolvedValue({
+      id: 'refresh-token-id',
+      userId: 'user-id',
+    });
+
+    mockJWT.createAccessToken.mockResolvedValue('access-token');
+    mockJWT.createRefreshToken.mockResolvedValue('refresh-token');
+
+    const response = await request(app).post('/api/auth/login').send({
+      email: 'test@example.com',
+      password: 'ValidPassword123',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toBe('Login successful');
+    expect(response.body.user.email).toBe('test@example.com');
+    expect(mockJWT.setAuthCookies).toHaveBeenCalled();
+  });
+
   it('should reject login with missing credentials', async () => {
     const response = await request(app).post('/api/auth/login').send({});
 
     expect(response.status).toBe(400);
   });
 
-  it('should reject invalid credentials', async () => {
-    // Mock user not found or invalid password
+  it('should reject login with invalid email', async () => {
     mockPrisma.user.findUnique.mockResolvedValue(null);
 
     const response = await request(app).post('/api/auth/login').send({
@@ -228,8 +319,44 @@ describe('POST /api/auth/login', () => {
       password: 'wrongpassword',
     });
 
-    // Should return 401 (authentication error)
-    expect([400, 401]).toContain(response.status);
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe('AuthenticationError');
+  });
+
+  it('should reject login with wrong password', async () => {
+    const passwordHash = await argon2.hash('CorrectPassword123');
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'user-id',
+      email: 'test@example.com',
+      passwordHash,
+      emailVerified: true,
+    });
+
+    const response = await request(app).post('/api/auth/login').send({
+      email: 'test@example.com',
+      password: 'WrongPassword123',
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe('AuthenticationError');
+  });
+
+  it('should reject login for unverified email (if ALLOW_UNVERIFIED_LOGIN=false)', async () => {
+    const passwordHash = await argon2.hash('ValidPassword123');
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'user-id',
+      email: 'test@example.com',
+      passwordHash,
+      emailVerified: false,
+    });
+
+    const response = await request(app).post('/api/auth/login').send({
+      email: 'test@example.com',
+      password: 'ValidPassword123',
+    });
+
+    // Should reject if email not verified
+    expect([401, 400]).toContain(response.status);
   });
 });
 
@@ -245,7 +372,7 @@ describe('POST /api/auth/resend-verification', () => {
     expect(response.body.error.code).toBe('ValidationError');
   });
 
-  it('should return success message (prevent user enumeration)', async () => {
+  it('should return success message even if user does not exist (prevent enumeration)', async () => {
     // Mock user not found
     mockPrisma.user.findUnique.mockResolvedValue(null);
 
@@ -254,7 +381,32 @@ describe('POST /api/auth/resend-verification', () => {
     });
 
     // Should return 404 with generic message
-    expect([404, 200]).toContain(response.status);
+    expect(response.status).toBe(404);
+  });
+
+  it('should resend verification email for existing unverified user', async () => {
+    const mockUser = {
+      id: 'user-id',
+      email: 'test@example.com',
+      emailVerified: false,
+    };
+
+    mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+    mockPrisma.$transaction.mockImplementation(async (callback) => {
+      const tx = {
+        emailToken: {
+          create: jest.fn().mockResolvedValue({ id: 'token-id' }),
+        },
+      };
+      return callback(tx);
+    });
+
+    const response = await request(app).post('/api/auth/resend-verification').send({
+      email: 'test@example.com',
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockEmailQueue.add).toHaveBeenCalled();
   });
 });
 
@@ -264,12 +416,59 @@ describe('POST /api/auth/refresh', () => {
   });
 
   it('should reject request without refresh token cookie', async () => {
-    const { getTokenFromCookie } = await import('../lib/jwt.js');
-    getTokenFromCookie.mockReturnValue(undefined);
+    mockJWT.getTokenFromCookie.mockReturnValue(undefined);
 
     const response = await request(app).post('/api/auth/refresh');
 
     expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe('AuthenticationError');
+  });
+
+  it('should refresh tokens with valid refresh token', async () => {
+    const mockUser = {
+      id: 'user-id',
+      email: 'test@example.com',
+      emailVerified: true,
+    };
+
+    mockJWT.getTokenFromCookie.mockReturnValue('refresh-token');
+    mockJWT.verifyToken.mockResolvedValue({
+      userId: 'user-id',
+      email: 'test@example.com',
+      type: 'refresh',
+    });
+
+    mockPrisma.refreshToken.findFirst.mockResolvedValue({
+      id: 'token-id',
+      userId: 'user-id',
+      user: mockUser,
+    });
+
+    mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'user-id',
+      role: 'USER',
+    });
+
+    mockJWT.createAccessToken.mockResolvedValue('new-access-token');
+    mockJWT.createRefreshToken.mockResolvedValue('new-refresh-token');
+    mockPrisma.refreshToken.create.mockResolvedValue({ id: 'new-token-id' });
+
+    const response = await request(app).post('/api/auth/refresh');
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toContain('Token refreshed successfully');
+    expect(mockJWT.setAuthCookies).toHaveBeenCalled();
+  });
+
+  it('should reject invalid refresh token', async () => {
+    mockJWT.getTokenFromCookie.mockReturnValue('invalid-token');
+    mockJWT.verifyToken.mockRejectedValue(new Error('Invalid token'));
+
+    const response = await request(app).post('/api/auth/refresh');
+
+    expect(response.status).toBe(401);
+    expect(mockJWT.clearAuthCookies).toHaveBeenCalled();
   });
 });
 
@@ -278,13 +477,24 @@ describe('POST /api/auth/logout', () => {
     jest.clearAllMocks();
   });
 
-  it('should clear cookies on logout', async () => {
-    const { clearAuthCookies } = await import('../lib/jwt.js');
+  it('should clear cookies and revoke refresh token on logout', async () => {
+    mockJWT.getTokenFromCookie.mockReturnValue('refresh-token');
+    mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
 
     const response = await request(app).post('/api/auth/logout');
 
-    expect(clearAuthCookies).toHaveBeenCalled();
     expect(response.status).toBe(200);
+    expect(response.body.message).toBe('Logged out successfully');
+    expect(mockJWT.clearAuthCookies).toHaveBeenCalled();
+  });
+
+  it('should logout even without refresh token', async () => {
+    mockJWT.getTokenFromCookie.mockReturnValue(undefined);
+
+    const response = await request(app).post('/api/auth/logout');
+
+    expect(response.status).toBe(200);
+    expect(mockJWT.clearAuthCookies).toHaveBeenCalled();
   });
 });
 
@@ -294,11 +504,154 @@ describe('GET /api/auth/me', () => {
   });
 
   it('should reject request without access token', async () => {
-    const { getTokenFromCookie } = await import('../lib/jwt.js');
-    getTokenFromCookie.mockReturnValue(undefined);
+    mockJWT.getTokenFromCookie.mockReturnValue(undefined);
 
     const response = await request(app).get('/api/auth/me');
 
     expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe('AuthenticationError');
+  });
+
+  it('should return user info with valid access token', async () => {
+    mockJWT.getTokenFromCookie.mockReturnValue('access-token');
+    mockJWT.verifyToken.mockResolvedValue({
+      userId: 'user-id',
+      email: 'test@example.com',
+      type: 'access',
+    });
+
+    const response = await request(app).get('/api/auth/me');
+
+    expect(response.status).toBe(200);
+    expect(response.body.user.id).toBe('user-id');
+    expect(response.body.user.email).toBe('test@example.com');
+  });
+
+  it('should reject invalid access token', async () => {
+    mockJWT.getTokenFromCookie.mockReturnValue('invalid-token');
+    mockJWT.verifyToken.mockRejectedValue(new Error('Invalid token'));
+
+    const response = await request(app).get('/api/auth/me');
+
+    expect(response.status).toBe(401);
+  });
+});
+
+describe('POST /api/auth/forgot-password', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should reject request without email', async () => {
+    const response = await request(app).post('/api/auth/forgot-password').send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('ValidationError');
+  });
+
+  it('should return success message even if user does not exist (prevent enumeration)', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(null);
+
+    const response = await request(app).post('/api/auth/forgot-password').send({
+      email: 'nonexistent@example.com',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toContain('password reset link has been sent');
+  });
+
+  it('should send password reset email for existing user', async () => {
+    const mockUser = {
+      id: 'user-id',
+      email: 'test@example.com',
+      passwordHash: 'hashed-password',
+    };
+
+    mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+    mockPrisma.passwordResetToken.create.mockResolvedValue({ id: 'token-id' });
+
+    const response = await request(app).post('/api/auth/forgot-password').send({
+      email: 'test@example.com',
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockEmailQueue.add).toHaveBeenCalledWith(
+      'sendPasswordReset',
+      expect.objectContaining({
+        type: 'sendPasswordReset',
+        email: 'test@example.com',
+      }),
+      expect.any(Object)
+    );
+  });
+});
+
+describe('POST /api/auth/reset-password', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should reject request without token or password', async () => {
+    const response = await request(app).post('/api/auth/reset-password').send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('ValidationError');
+  });
+
+  it('should reset password with valid token', async () => {
+    const mockUser = {
+      id: 'user-id',
+      email: 'test@example.com',
+    };
+
+    mockPrisma.passwordResetToken.findFirst.mockResolvedValue({
+      id: 'token-id',
+      userId: 'user-id',
+      user: mockUser,
+    });
+
+    mockPrisma.$transaction.mockImplementation(async (callback) => {
+      const tx = {
+        passwordResetToken: {
+          update: jest.fn().mockResolvedValue({}),
+        },
+        user: {
+          update: jest.fn().mockResolvedValue(mockUser),
+        },
+      };
+      return callback(tx);
+    });
+
+    mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+
+    const response = await request(app).post('/api/auth/reset-password').send({
+      token: 'valid-reset-token',
+      password: 'NewPassword123',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toContain('Password has been reset successfully');
+  });
+
+  it('should reject weak password', async () => {
+    const response = await request(app).post('/api/auth/reset-password').send({
+      token: 'valid-token',
+      password: 'weak',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('ValidationError');
+  });
+
+  it('should reject expired or invalid token', async () => {
+    mockPrisma.passwordResetToken.findFirst.mockResolvedValue(null);
+
+    const response = await request(app).post('/api/auth/reset-password').send({
+      token: 'expired-token',
+      password: 'NewPassword123',
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe('NotFoundError');
   });
 });

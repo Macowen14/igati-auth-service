@@ -81,7 +81,7 @@ services:
       NODE_ENV: production
       APP_URL: ${APP_URL}
       # Optional with defaults
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-noreply@example.com}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-info@mail.chattzy.site}
       EMAIL_TOKEN_EXPIRY_HOURS: ${EMAIL_TOKEN_EXPIRY_HOURS:-24}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
