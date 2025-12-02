@@ -99,7 +99,28 @@ export async function healthCheck() {
   }
 }
 
-export default emailQueue;
+/**
+ * Configure Redis maxmemory-policy for production
+ * Sets noeviction policy to prevent BullMQ jobs from being evicted when Redis runs out of memory.
+ * This should be called during application startup in production.
+ *
+ * @returns {Promise<void>}
+ */
+export async function configureRedisMemoryPolicy() {
+  try {
+    // Set maxmemory-policy to noeviction
+    // This prevents Redis from evicting keys when memory limit is reached
+    // Important for BullMQ to ensure jobs are not lost
+    await redisConnection.config('SET', 'maxmemory-policy', 'noeviction');
+    logger.info('Redis maxmemory-policy set to noeviction');
+  } catch (error) {
+    // Log warning but don't fail - Redis might not allow config changes
+    // or might already be configured correctly
+    logger.warn(
+      { error },
+      'Failed to set Redis maxmemory-policy. This is normal if Redis is managed externally or policy is already set.'
+    );
+  }
+}
 
-// TODO : set in production :
-// CONFIG SET maxmemory-policy noeviction
+export default emailQueue;
