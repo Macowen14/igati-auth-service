@@ -115,8 +115,9 @@ export async function requestPasswordReset(email) {
       {
         userId: user.id,
         email: user.email,
+        jobType: 'sendPasswordReset',
       },
-      'Password reset email job enqueued'
+      'Password reset email job enqueued. NOTE: Make sure the email worker is running (npm run worker:dev)'
     );
   } catch (error) {
     logger.error({ error, userId: user.id }, 'Failed to enqueue password reset email job');

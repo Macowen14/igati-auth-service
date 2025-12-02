@@ -44,6 +44,10 @@ redisConnection.on('error', (error) => {
   logger.error({ error }, 'Email worker: Redis connection error');
 });
 
+redisConnection.on('ready', () => {
+  logger.info('Email worker: Redis ready, starting to process jobs...');
+});
+
 /**
  * Email Worker
  * Processes jobs from the 'email' queue
@@ -168,7 +172,25 @@ const emailWorker = new Worker(
 // Worker event handlers
 
 emailWorker.on('completed', (job) => {
-  logger.debug({ jobId: job.id }, 'Email job completed');
+  logger.info(
+    {
+      jobId: job.id,
+      type: job.data?.type,
+      email: job.data?.email,
+    },
+    'Email job completed successfully'
+  );
+});
+
+emailWorker.on('active', (job) => {
+  logger.info(
+    {
+      jobId: job.id,
+      type: job.data?.type,
+      email: job.data?.email,
+    },
+    'Email job started processing'
+  );
 });
 
 emailWorker.on('failed', (job, error) => {
@@ -240,7 +262,25 @@ process.on('unhandledRejection', (reason, promise) => {
   shutdown();
 });
 
-logger.info('Email worker started and ready to process jobs');
+// Log worker startup
+logger.info(
+  {
+    queueName: 'email',
+    concurrency: 5,
+    redisUrl: config.REDIS_URL?.replace(/:[^:@]+@/, ':****@'),
+    resendFromEmail: config.RESEND_FROM_EMAIL,
+  },
+  'Email worker started and ready to process jobs'
+);
+
+// Log a warning if RESEND_API_KEY is not set
+if (!config.RESEND_API_KEY) {
+  logger.error(
+    'RESEND_API_KEY is not set! Email sending will fail. Please set RESEND_API_KEY in your .env file.'
+  );
+} else {
+  logger.info('Resend API key configured');
+}
 
 // Supported email job types:
 // - sendVerification: Email verification for new signups
