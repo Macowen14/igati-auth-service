@@ -46,4 +46,3 @@ export function authorize(allowedRoles) {
 }
 
 export default authorize;
-

@@ -9,9 +9,10 @@
  *
  * IMPORTANT for Neon:
  * - Use the connection pooler URL (ends with -pooler) for better connection management
- * - Example: postgresql://user:pass@ep-xxx-pooler.us-east-1.aws.neon.tech/db?sslmode=require
+ * - Add connection pool parameters to DATABASE_URL:
+ *   ?sslmode=require&connection_limit=10&pool_timeout=20
+ * - Example: postgresql://user:pass@ep-xxx-pooler.us-east-1.aws.neon.tech/db?sslmode=require&connection_limit=10&pool_timeout=20
  * - The pooler handles connection lifecycle automatically
- * - This module adds automatic reconnection for additional reliability
  */
 
 import pkg from '@prisma/client';
@@ -19,19 +20,56 @@ const { PrismaClient } = pkg;
 import logger from './logger.js';
 
 /**
+ * Enhance DATABASE_URL with connection pool parameters if not already present
+ * This ensures proper connection pool configuration for Neon
+ */
+function enhanceDatabaseUrl(url) {
+  if (!url) return url;
+
+  try {
+    const urlObj = new URL(url);
+
+    // Add connection pool parameters if not present
+    const params = urlObj.searchParams;
+
+    // Set connection_limit (default: 10 for Neon pooler)
+    if (!params.has('connection_limit')) {
+      params.set('connection_limit', '10');
+    }
+
+    // Set pool_timeout in seconds (default: 20 seconds)
+    if (!params.has('pool_timeout')) {
+      params.set('pool_timeout', '20');
+    }
+
+    // Ensure sslmode is set for Neon
+    if (!params.has('sslmode') && url.includes('neon.tech')) {
+      params.set('sslmode', 'require');
+    }
+
+    return urlObj.toString();
+  } catch (error) {
+    // If URL parsing fails, return original URL
+    logger.warn({ error: error.message }, 'Failed to parse DATABASE_URL, using as-is');
+    return url;
+  }
+}
+
+/**
  * Create Prisma client instance with connection pool configuration
  *
  * Configuration for Neon/serverless PostgreSQL:
- * - Connection pool size: 10 connections
- * - Connection timeout: 10 seconds
- * - Query timeout: 20 seconds
+ * - Connection pool size: 10 connections (via connection_limit parameter)
+ * - Connection timeout: 20 seconds (via pool_timeout parameter)
  * - Automatic reconnection on connection errors
  */
+const enhancedDatabaseUrl = enhanceDatabaseUrl(process.env.DATABASE_URL);
+
 const prisma = new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   datasources: {
     db: {
-      url: process.env.DATABASE_URL,
+      url: enhancedDatabaseUrl,
     },
   },
 });
@@ -44,8 +82,11 @@ const MAX_CONNECTION_ATTEMPTS = 5;
 /**
  * Connect to database with retry logic
  * Handles connection errors and reconnection attempts
+ * Note: Prisma manages connections automatically, we only need to ensure it's initialized
  */
 async function connectWithRetry() {
+  // Prisma connects lazily, so we don't need to call $connect() unless disconnected
+  // Only reconnect if we know we're disconnected
   if (isConnected) {
     return;
   }
@@ -62,7 +103,7 @@ async function connectWithRetry() {
     } catch (error) {
       connectionAttempts++;
       const errorMessage = error.message || String(error);
-      
+
       // Check if DATABASE_URL is missing or invalid
       if (!process.env.DATABASE_URL) {
         logger.error(
@@ -98,8 +139,8 @@ async function connectWithRetry() {
         if (connectionAttempts >= MAX_CONNECTION_ATTEMPTS) {
           throw new Error(
             `Failed to connect to database after ${MAX_CONNECTION_ATTEMPTS} attempts. ` +
-            `Please verify: 1) DATABASE_URL is correct, 2) Database server is running, 3) Network connectivity. ` +
-            `Error: ${errorMessage}`
+              `Please verify: 1) DATABASE_URL is correct, 2) Database server is running, 3) Network connectivity. ` +
+              `Error: ${errorMessage}`
           );
         }
 
@@ -124,15 +165,12 @@ async function connectWithRetry() {
 
 /**
  * Initialize connection on module load
- * Non-blocking - connection happens in background
+ * Prisma connects lazily, so we don't need to connect immediately
+ * Connection will happen on first query
  */
-connectWithRetry().catch((error) => {
-  logger.error(
-    { error: error.message },
-    'Initial database connection failed. The application will attempt to reconnect on first query.'
-  );
-  // Don't throw - allow app to start and reconnect on first query
-});
+// Don't connect immediately - let Prisma connect lazily on first query
+// This prevents connection pool exhaustion on startup
+logger.info('Prisma client initialized. Connections will be established on first query.');
 
 /**
  * Gracefully disconnect from database
@@ -152,21 +190,38 @@ export async function disconnect() {
 
 /**
  * Execute a query with automatic reconnection
- * Wraps Prisma queries to handle connection errors gracefully
+ * Only reconnects on actual connection errors, not pool exhaustion
  */
 async function executeWithReconnect(queryFn) {
   try {
     return await queryFn();
   } catch (error) {
     const errorMessage = error.message || String(error);
-    
-    // Check if it's a connection error
+
+    // Check if it's a connection pool timeout (all connections in use)
+    if (errorMessage.includes('Timed out fetching a new connection from the connection pool')) {
+      logger.error(
+        {
+          error: errorMessage,
+        },
+        'Connection pool exhausted. This usually means too many concurrent queries or connections not being released. ' +
+          'Check for connection leaks or increase connection_limit in DATABASE_URL.'
+      );
+      // Don't retry pool exhaustion - throw immediately
+      throw new Error(
+        'Database connection pool exhausted. Please try again in a moment. ' +
+          'If this persists, check for connection leaks or increase connection_limit in DATABASE_URL.'
+      );
+    }
+
+    // Check if it's a connection error (not pool-related)
     if (
-      !isConnected ||
       errorMessage.includes('Closed') ||
       errorMessage.includes("Can't reach database server") ||
       errorMessage.includes('Connection terminated') ||
-      errorMessage.includes('Connection refused')
+      errorMessage.includes('Connection refused') ||
+      errorMessage.includes('ENOTFOUND') ||
+      errorMessage.includes('ETIMEDOUT')
     ) {
       logger.warn(
         {
@@ -174,13 +229,13 @@ async function executeWithReconnect(queryFn) {
         },
         'Database connection lost. Attempting to reconnect...'
       );
-      
+
       isConnected = false;
-      
+
       // Attempt to reconnect
       try {
         await connectWithRetry();
-        
+
         // Retry the query once after reconnection
         logger.info('Database reconnected. Retrying query...');
         return await queryFn();
@@ -196,7 +251,7 @@ async function executeWithReconnect(queryFn) {
         throw reconnectError;
       }
     }
-    
+
     // For other errors, throw as-is
     throw error;
   }
@@ -204,27 +259,64 @@ async function executeWithReconnect(queryFn) {
 
 /**
  * Wrapped Prisma client with automatic reconnection
- * All queries automatically retry on connection errors
+ * Recursively proxies model objects to intercept all queries
  */
 const prismaWithReconnect = new Proxy(prisma, {
   get(target, prop) {
     const value = target[prop];
-    
-    // Wrap all Prisma methods to handle reconnection
-    if (typeof value === 'function') {
+
+    // Handle connection management methods - don't wrap these
+    if (prop === '$connect' || prop === '$disconnect' || prop === '$on' || prop === '$use') {
+      return value;
+    }
+
+    // Wrap $ methods (like $queryRaw, $transaction, etc.)
+    if (typeof value === 'function' && typeof prop === 'string' && prop.startsWith('$')) {
       return function (...args) {
-        // For transaction methods, wrap differently
+        // For transaction methods, handle differently
         if (prop === '$transaction') {
           return value.apply(target, args).catch((error) => {
             return handleConnectionError(error, () => value.apply(target, args));
           });
         }
-        
-        // For all other methods, use executeWithReconnect
+
+        // For all other $ methods, use executeWithReconnect
         return executeWithReconnect(() => value.apply(target, args));
       };
     }
-    
+
+    // Wrap model delegates (like prisma.user, prisma.post, etc.)
+    // These are objects that contain query methods like findMany, create, etc.
+    if (value && typeof value === 'object' && !Array.isArray(value) && value !== null) {
+      // Check if it's a model delegate by checking for common Prisma model methods
+      const isModelDelegate =
+        typeof value.findMany === 'function' ||
+        typeof value.findUnique === 'function' ||
+        typeof value.create === 'function' ||
+        typeof value.update === 'function' ||
+        typeof value.delete === 'function' ||
+        typeof value.upsert === 'function' ||
+        typeof value.count === 'function' ||
+        typeof value.aggregate === 'function';
+
+      if (isModelDelegate) {
+        return new Proxy(value, {
+          get(modelTarget, modelProp) {
+            const modelValue = modelTarget[modelProp];
+
+            // Wrap all model query methods
+            if (typeof modelValue === 'function') {
+              return function (...args) {
+                return executeWithReconnect(() => modelValue.apply(modelTarget, args));
+              };
+            }
+
+            return modelValue;
+          },
+        });
+      }
+    }
+
     return value;
   },
 });
@@ -234,7 +326,12 @@ const prismaWithReconnect = new Proxy(prisma, {
  */
 async function handleConnectionError(error, retryFn) {
   const errorMessage = error.message || String(error);
-  
+
+  // Don't retry on pool exhaustion
+  if (errorMessage.includes('Timed out fetching a new connection from the connection pool')) {
+    throw error;
+  }
+
   if (
     errorMessage.includes('Closed') ||
     errorMessage.includes("Can't reach database server") ||
@@ -242,7 +339,7 @@ async function handleConnectionError(error, retryFn) {
     errorMessage.includes('Connection refused')
   ) {
     isConnected = false;
-    
+
     try {
       await connectWithRetry();
       return await retryFn();
@@ -250,11 +347,11 @@ async function handleConnectionError(error, retryFn) {
       const reconnectErrorMessage = reconnectError.message || String(reconnectError);
       throw new Error(
         `Database connection failed: ${reconnectErrorMessage}. ` +
-        `Please verify: 1) DATABASE_URL is correct, 2) Database server is running, 3) Network connectivity.`
+          `Please verify: 1) DATABASE_URL is correct, 2) Database server is running, 3) Network connectivity.`
       );
     }
   }
-  
+
   throw error;
 }
 
@@ -269,7 +366,7 @@ export async function healthCheck() {
     return true;
   } catch (error) {
     const errorMessage = error.message || String(error);
-    
+
     // Provide helpful error message
     if (errorMessage.includes("Can't reach database server")) {
       logger.error(
@@ -282,7 +379,7 @@ export async function healthCheck() {
     } else {
       logger.error({ error: errorMessage }, 'Database health check failed');
     }
-    
+
     return false;
   }
 }

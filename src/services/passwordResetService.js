@@ -69,7 +69,10 @@ export async function requestPasswordReset(email) {
 
   // Check if user has a password (not OAuth-only user)
   if (!user.passwordHash) {
-    logger.debug({ userId: user.id, email: user.email }, 'Password reset requested for OAuth-only user');
+    logger.debug(
+      { userId: user.id, email: user.email },
+      'Password reset requested for OAuth-only user'
+    );
     return {
       message: 'If an account exists with this email, a password reset link has been sent',
     };
@@ -238,4 +241,3 @@ export async function resetPassword(token, newPassword) {
     message: 'Password has been reset successfully. Please log in with your new password.',
   };
 }
-
