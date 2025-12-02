@@ -157,12 +157,13 @@ export async function createUser({ email, password, name }) {
       }
     );
 
-    logger.debug(
+    logger.info(
       {
         userId: result.user.id,
         email: result.user.email,
+        jobType: 'sendVerification',
       },
-      'Email verification job enqueued'
+      'Email verification job enqueued. NOTE: Make sure the email worker is running (npm run worker:dev)'
     );
   } catch (error) {
     // Log error but don't fail the signup - email can be resent later
@@ -334,8 +335,9 @@ export async function resendVerificationEmail(email) {
       {
         userId: user.id,
         email: user.email,
+        jobType: 'sendVerification',
       },
-      'Verification email resend job enqueued'
+      'Verification email resend job enqueued. NOTE: Make sure the email worker is running (npm run worker:dev)'
     );
   } catch (error) {
     logger.error({ error, userId: user.id }, 'Failed to enqueue resend verification email job');
