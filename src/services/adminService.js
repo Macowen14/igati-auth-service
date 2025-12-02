@@ -86,10 +86,7 @@ export async function updateUserRole(targetUserId, newRole, currentUserRole) {
   if (newRole === 'SUPERUSER' && currentUserRole !== 'SUPERUSER') {
     throw new AuthorizationError('Only superusers can assign the SUPERUSER role');
   }
-  // Only SUPERUSER can modify another SUPERUSER's role
-  if (targetUser.role === 'SUPERUSER' && currentUserRole !== 'SUPERUSER') {
-    throw new AuthorizationError("Only superusers can modify a superuser's role");
-  }
+ 
   // Check if target user exists
   const targetUser = await prisma.user.findUnique({
     where: { id: targetUserId },
@@ -102,6 +99,11 @@ export async function updateUserRole(targetUserId, newRole, currentUserRole) {
 
   if (!targetUser) {
     throw new NotFoundError('User not found');
+  }
+
+  // Only SUPERUSER can modify another SUPERUSER's role
+ if (targetUser.role === 'SUPERUSER' && currentUserRole !== 'SUPERUSER') {
+    throw new AuthorizationError("Only superusers can modify a superuser's role");
   }
 
   // Prevent changing role if user is already that role
