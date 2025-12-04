@@ -47,3 +47,5 @@ temp/
 # Project specific
 cursor.md
 NEON_CONNECTION_FIX.md
+
+.early.coverage
