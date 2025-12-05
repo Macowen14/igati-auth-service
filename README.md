@@ -657,6 +657,108 @@ GitHub OAuth callback handler. Called by GitHub after authorization.
 
 ---
 
+### Log Download Endpoints
+
+**All log download endpoints require a secret key (`LOG_DOWNLOAD_KEY`) for security.**
+
+#### GET `/api/auth/logs`
+
+List all available log files.
+
+**Query Parameters:**
+- `key` (required) - Log download secret key
+
+**OR Header:**
+- `X-Log-Key` (required) - Log download secret key
+
+**Success Response (200):**
+```json
+{
+  "message": "Log files retrieved successfully",
+  "files": [
+    {
+      "name": "app.log",
+      "size": 1048576,
+      "modified": "2025-01-15T10:00:00.000Z",
+      "created": "2025-01-15T08:00:00.000Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized` - Invalid or missing log download key
+
+---
+
+#### GET `/api/auth/logs/:filename`
+
+Download a specific log file.
+
+**URL Parameters:**
+- `filename` (required) - Name of the log file (e.g., `app.log`, `debug.log`)
+
+**Query Parameters:**
+- `key` (required) - Log download secret key
+
+**OR Header:**
+- `X-Log-Key` (required) - Log download secret key
+
+**Success Response (200):**
+- Content-Type: `text/plain`
+- Content-Disposition: `attachment; filename="app.log"`
+- Response body: Log file content (streamed)
+
+**Response Headers:**
+- `X-Log-File-Size`: File size in bytes
+- `X-Log-Modified`: Last modified timestamp
+
+**Error Responses:**
+- `400 Bad Request` - Invalid filename (not a .log file)
+- `401 Unauthorized` - Invalid or missing log download key
+- `403 Forbidden` - Directory traversal attempt blocked
+- `404 Not Found` - Log file not found
+
+**Example Usage:**
+
+```bash
+# Using wget with query parameter
+wget "http://localhost:4000/api/auth/logs/app.log?key=your-secret-key" -O app.log
+
+# Using wget with header
+wget --header="X-Log-Key: your-secret-key" \
+  "http://localhost:4000/api/auth/logs/app.log" -O app.log
+
+# Using curl with query parameter
+curl "http://localhost:4000/api/auth/logs/app.log?key=your-secret-key" -o app.log
+
+# Using curl with header
+curl -H "X-Log-Key: your-secret-key" \
+  "http://localhost:4000/api/auth/logs/app.log" -o app.log
+```
+
+**Security Configuration:**
+
+1. Generate a secure key:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+
+2. Add to `.env`:
+   ```bash
+   LOG_DOWNLOAD_KEY=your-generated-secret-key-here
+   ```
+
+**Security Features:**
+- Secret key authentication (prevents unauthorized access)
+- Filename sanitization (prevents directory traversal attacks)
+- Only `.log` files can be downloaded
+- All download attempts are logged
+- Path validation ensures files are within logs directory
+
+---
+
 ### Health Check Endpoints
 
 #### GET `/health`
@@ -949,6 +1051,7 @@ Tests use Jest with Supertest. BullMQ and database are mocked in unit tests.
 | `GITHUB_CLIENT_SECRET`     | -                       | GitHub OAuth client secret                                       |
 | `RATE_LIMIT_MAX_REQUESTS`  | `5`                     | Max requests per window                                          |
 | `RATE_LIMIT_WINDOW_MS`     | `900000`                | Rate limit window (15 minutes)                                   |
+| `LOG_DOWNLOAD_KEY`         | -                       | Secret key for downloading log files (generate with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) |
 
 See `.env.example` for all available variables with descriptions.
 
