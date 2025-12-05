@@ -16,8 +16,7 @@ import { readdir, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { v4 as uuidv4 } from 'uuid';
-import { createRequestLogger } from '../lib/logger.js';
+import { timingSafeEqual } from 'node:crypto';
 import asyncHandler from '../middlewares/asyncHandler.js';
 import config from '../lib/config.js';
 
@@ -28,21 +27,13 @@ const logsDir = resolve(__dirname, '../../logs');
 const router = express.Router();
 
 /**
- * Request ID middleware
- */
-router.use((req, res, next) => {
-  req.id = uuidv4();
-  req.logger = createRequestLogger(req.id);
-  next();
-});
-
-/**
  * Validate log download key
  * Checks for key in query parameter or X-Log-Key header
+ * Uses timing-safe comparison to prevent timing attacks
  */
 function validateLogKey(req) {
   const providedKey = req.query.key || req.headers['x-log-key'];
-  const expectedKey = process.env.LOG_DOWNLOAD_KEY;
+  const expectedKey = config.LOG_DOWNLOAD_KEY;
 
   if (!expectedKey) {
     req.logger.warn('LOG_DOWNLOAD_KEY not configured');
@@ -53,17 +44,12 @@ function validateLogKey(req) {
     return false;
   }
 
-  // Use constant-time comparison to prevent timing attacks
-  if (providedKey.length !== expectedKey.length) {
+  try {
+    return timingSafeEqual(Buffer.from(providedKey, 'utf8'), Buffer.from(expectedKey, 'utf8'));
+  } catch {
+    // timingSafeEqual throws if buffer lengths differ
     return false;
   }
-
-  let match = true;
-  for (let i = 0; i < expectedKey.length; i++) {
-    match = match && providedKey[i] === expectedKey[i];
-  }
-
-  return match;
 }
 
 /**
@@ -150,7 +136,10 @@ router.get(
   '/logs/:filename',
   asyncHandler(async (req, res) => {
     if (!validateLogKey(req)) {
-      req.logger.warn({ ip: req.ip, filename: req.params.filename }, 'Unauthorized log download attempt');
+      req.logger.warn(
+        { ip: req.ip, filename: req.params.filename },
+        'Unauthorized log download attempt'
+      );
       return res.status(401).json({
         error: {
           code: 'AuthenticationError',
@@ -247,4 +236,3 @@ router.get(
 );
 
 export default router;
-

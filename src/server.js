@@ -48,7 +48,7 @@ app.use(
     origin: process.env.FRONTEND_URL || config.APP_URL,
     credentials: true, // Allow cookies to be sent
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Log-Key'],
   })
 );
 
