@@ -49,3 +49,4 @@ cursor.md
 NEON_CONNECTION_FIX.md
 
 .early.coverage
+*.code-workspace
