@@ -104,6 +104,12 @@ const config = cleanEnv(
       default: 5,
       desc: 'Maximum requests per window for auth endpoints',
     }),
+
+    // Log Download Security
+    LOG_DOWNLOAD_KEY: str({
+      default: '',
+      desc: "Secret key for downloading log files (required for log download endpoints). Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+    }),
   },
   {
     // Envalid options

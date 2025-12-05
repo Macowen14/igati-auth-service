@@ -847,6 +847,168 @@ export const authAPI = {
 
 ---
 
+## Log Download Endpoints
+
+**All log download endpoints require a secret key for security.**
+
+### 14. List Log Files
+
+**GET** `/api/auth/logs`
+
+List all available log files. Requires `LOG_DOWNLOAD_KEY` in query parameter or header.
+
+**Request:**
+
+```javascript
+// Using query parameter
+const response = await fetch('http://localhost:4000/api/auth/logs?key=your-secret-key', {
+  method: 'GET',
+  credentials: 'include',
+});
+
+// OR using header
+const response = await fetch('http://localhost:4000/api/auth/logs', {
+  method: 'GET',
+  headers: {
+    'X-Log-Key': 'your-secret-key',
+  },
+  credentials: 'include',
+});
+```
+
+**Query Parameters:**
+
+- `key` (required) - Log download secret key (or use `X-Log-Key` header)
+
+**Success Response (200):**
+
+```json
+{
+  "message": "Log files retrieved successfully",
+  "files": [
+    {
+      "name": "app.log",
+      "size": 1048576,
+      "modified": "2025-01-15T10:00:00.000Z",
+      "created": "2025-01-15T08:00:00.000Z"
+    },
+    {
+      "name": "debug.log",
+      "size": 524288,
+      "modified": "2025-01-15T10:00:00.000Z",
+      "created": "2025-01-15T08:00:00.000Z"
+    }
+  ],
+  "count": 2
+}
+```
+
+**Error Responses:**
+
+- `401` - Invalid or missing log download key
+
+---
+
+### 15. Download Log File
+
+**GET** `/api/auth/logs/:filename`
+
+Download a specific log file. Requires `LOG_DOWNLOAD_KEY` in query parameter or header.
+
+**Request:**
+
+```javascript
+// Using query parameter
+const filename = 'app.log';
+const response = await fetch(
+  `http://localhost:4000/api/auth/logs/${filename}?key=your-secret-key`,
+  {
+    method: 'GET',
+    credentials: 'include',
+  }
+);
+
+// OR using header
+const response = await fetch(`http://localhost:4000/api/auth/logs/${filename}`, {
+  method: 'GET',
+  headers: {
+    'X-Log-Key': 'your-secret-key',
+  },
+  credentials: 'include',
+});
+```
+
+**Using wget:**
+
+```bash
+# With query parameter
+wget "http://localhost:4000/api/auth/logs/app.log?key=your-secret-key" -O app.log
+
+# With header
+wget --header="X-Log-Key: your-secret-key" \
+  "http://localhost:4000/api/auth/logs/app.log" -O app.log
+```
+
+**Using curl:**
+
+```bash
+# With query parameter
+curl "http://localhost:4000/api/auth/logs/app.log?key=your-secret-key" -o app.log
+
+# With header
+curl -H "X-Log-Key: your-secret-key" \
+  "http://localhost:4000/api/auth/logs/app.log" -o app.log
+```
+
+**URL Parameters:**
+
+- `filename` (required) - Name of the log file (e.g., `app.log`, `debug.log`)
+
+**Query Parameters:**
+
+- `key` (required) - Log download secret key (or use `X-Log-Key` header)
+
+**Success Response (200):**
+
+- Content-Type: `text/plain`
+- Content-Disposition: `attachment; filename="app.log"`
+- Response body: Log file content (streamed)
+
+**Response Headers:**
+
+- `X-Log-File-Size`: File size in bytes
+- `X-Log-Modified`: Last modified timestamp (ISO 8601)
+
+**Error Responses:**
+
+- `400` - Invalid filename (not a .log file)
+- `401` - Invalid or missing log download key
+- `403` - Directory traversal attempt blocked
+- `404` - Log file not found
+- `500` - Server error
+
+**Security Notes:**
+
+- Only `.log` files can be downloaded
+- Filenames are sanitized to prevent directory traversal
+- Secret key must be set in `LOG_DOWNLOAD_KEY` environment variable
+- All download attempts are logged
+
+**Setting up the secret key:**
+
+1. Generate a secure key:
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+
+2. Add to your `.env` file:
+   ```bash
+   LOG_DOWNLOAD_KEY=your-generated-secret-key-here
+   ```
+
+---
+
 ## CORS Configuration
 
 For the API to work with your frontend, ensure CORS is configured to allow your frontend domain:
@@ -912,6 +1074,8 @@ When rate limited, you'll receive a `429 Too Many Requests` response:
 | `/reset-password`       | POST   | No            | -             |
 | `/admin/users`          | GET    | Yes           | ADMIN/SUPER   |
 | `/admin/users/:id/role` | PUT    | Yes           | ADMIN/SUPER   |
+| `/logs`                 | GET    | Yes (key)     | -             |
+| `/logs/:filename`       | GET    | Yes (key)     | -             |
 
 ---
 
